@@ -21,6 +21,10 @@ data/processed/
 *.index
 *.npy
 
+# Local agent context, not for the public repo
+CLAUDE.md
+AGENT.md
+
 # Editor / OS
 .vscode/
 .idea/

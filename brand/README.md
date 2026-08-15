@@ -1,6 +1,6 @@
 # Brand assets
 
-The mark is a single grounded point: a line with a ringed dot resting exactly where it crosses. One line, one ring, one filled point, nothing decorative. Same idea, three sizes.
+The mark is a line that runs to a ring resting tangent on it, one point of contact, marked by a small dot. Not the ring's center, the exact point where the ring touches the line. Three elements, one shared stroke weight, one accent color used once. Not final, still under review.
 
 ## Files
 
@@ -20,7 +20,9 @@ The mark is a single grounded point: a line with a ringed dot resting exactly wh
 | Muted (light) | `#6B6358` | Secondary text on light surfaces |
 | Muted (dark) | `#C9BFAF` | Secondary text on dark surfaces |
 
-Color is used on exactly one element (the dot), never spread across the whole mark. No gradients, no glow, flat fills only. Wordmark font is system sans-serif (Helvetica Neue / Arial stack) at weight 700, tightened letter-spacing, because custom web fonts don't render reliably in GitHub's SVG viewer.
+Color is used on exactly one element (the dot), never spread across the whole mark. No gradients, no glow, flat fills only.
+
+The wordmark is Archivo (weight 650, OFL licensed), shipped as outlined vector paths rather than live `<text>`. GitHub's SVG renderer only has generic system fonts available, so live text silently falls back to plain Arial and loses the typeface. Outlining sidesteps that entirely: the letterforms are geometry, not a font reference, so they render identically everywhere. To change the wordmark, regenerate the paths with `fontTools.pens.svgPathPen` rather than hand-editing the path data.
 
 ## Using the banner in a README
 
