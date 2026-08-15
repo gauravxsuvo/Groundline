@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Env and secrets
+.env
+.env.local
+
+# Data and index artifacts (pulled from HF Hub at startup, not committed)
+data/raw/
+data/processed/
+*.faiss
+*.index
+*.npy
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
