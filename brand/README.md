@@ -1,6 +1,6 @@
 # Brand assets
 
-The mark is a waveform rising out of a solid baseline: voice, grounded. Same idea, three sizes.
+The mark is a single grounded point: a line with a ringed dot resting exactly where it crosses. One line, one ring, one filled point, nothing decorative. Same idea, three sizes.
 
 ## Files
 
@@ -16,11 +16,11 @@ The mark is a waveform rising out of a solid baseline: voice, grounded. Same ide
 |---|---|---|
 | Ink | `#17140F` | Text and mark on light surfaces |
 | Paper | `#F8F4EC` | Text and mark on dark surfaces, light banner background |
-| Accent | `#D9822B` | Waveform bars, the ground-line rule, always this color regardless of surface |
+| Accent | `#D9822B` | The one colored element, the dot at the center of the mark, always this color regardless of surface |
 | Muted (light) | `#6B6358` | Secondary text on light surfaces |
 | Muted (dark) | `#C9BFAF` | Secondary text on dark surfaces |
 
-No gradients, no glow, flat fills only. Wordmark font is system sans-serif (Helvetica Neue / Arial stack) at weight 800, tightened letter-spacing, because custom web fonts don't render reliably in GitHub's SVG viewer.
+Color is used on exactly one element (the dot), never spread across the whole mark. No gradients, no glow, flat fills only. Wordmark font is system sans-serif (Helvetica Neue / Arial stack) at weight 700, tightened letter-spacing, because custom web fonts don't render reliably in GitHub's SVG viewer.
 
 ## Using the banner in a README
 
