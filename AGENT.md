@@ -24,6 +24,7 @@ mic -> Sarvam STT -> harness:
 - `backend/scripts/benchmark_latency.py` - runs N queries, writes P50/P70/P100 to `docs/latency-report.md`
 - `frontend/` - React + Vite + TS + Tailwind + shadcn/ui + lucide-react icons
 - `backend/app/main.py` serves the built frontend and the API from one process
+- `brand/` - logo, mark, README banner (SVG, hand-written, see `brand/README.md` for colors and usage). Reuse these tokens in the frontend UI in Phase 5 rather than inventing a second palette.
 
 ## Run locally
 

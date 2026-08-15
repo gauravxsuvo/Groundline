@@ -6,6 +6,8 @@ Deadline: August 22, 2026, 11:59 PM. No resubmissions.
 
 Project name: Groundline. Plain English, no Indic-language name since the demo itself runs English only (the dataset is Indic-sourced, but that's not the same as the demo language, an Indic name would invite an awkward question from judges). Ties to the core guarantee: every answer is grounded in retrieved evidence, or the system says so instead of guessing.
 
+Brand assets are done: `brand/` has the mark, logo, and README banner (light and dark, switches with GitHub's theme via `<picture>`), plus a small brand guide with the color tokens. Hand-written SVG, no build step, no external fonts. Reuse the same tokens for the frontend UI in Phase 5 instead of picking new colors.
+
 ## Phase 0 - Foundations
 Status: done
 

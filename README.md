@@ -1,4 +1,8 @@
-# Groundline
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/banner-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="brand/banner-light.svg">
+  <img alt="Groundline" src="brand/banner-light.svg">
+</picture>
 
 A voice-enabled retrieval-augmented generation system built for HH Goa 2026, Task 2. You speak a question, it gets transcribed, retrieved against a corpus built from AI4Bharat's MSMARCO-XI dataset, and answered with citations back to the source passages. The name comes from the core guarantee: every answer is grounded in retrieved evidence, or it says so instead of guessing.
 

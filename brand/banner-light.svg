@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320">
+  <rect width="1280" height="320" fill="#F8F4EC"/>
+  <g transform="translate(316,70) scale(1.2)">
+    <rect x="10" y="76" width="80" height="8" rx="4" fill="#17140F"/>
+    <rect x="16" y="54" width="9" height="26" rx="4.5" fill="#D9822B"/>
+    <rect x="32" y="36" width="9" height="44" rx="4.5" fill="#D9822B"/>
+    <rect x="48" y="46" width="9" height="34" rx="4.5" fill="#D9822B"/>
+    <rect x="64" y="24" width="9" height="56" rx="4.5" fill="#D9822B"/>
+    <rect x="80" y="50" width="9" height="30" rx="4.5" fill="#D9822B"/>
+  </g>
+  <text x="464" y="130" dominant-baseline="central" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="800" font-size="84" letter-spacing="-1.5" fill="#17140F">Groundline</text>
+  <text x="640" y="235" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="500" font-size="30" fill="#6B6358">Voice in, grounded answers out.</text>
+  <rect x="0" y="316" width="1280" height="4" fill="#D9822B"/>
+</svg>
