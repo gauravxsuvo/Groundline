@@ -15,8 +15,7 @@ frontend/.vite/
 .env.local
 
 # Data and index artifacts (pulled from HF Hub at startup, not committed)
-data/raw/
-data/processed/
+backend/data/
 *.faiss
 *.index
 *.npy
