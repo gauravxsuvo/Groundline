@@ -13,3 +13,6 @@ bm25s==0.3.10
 pysbd==0.3.4
 
 huggingface_hub==0.28.1
+
+groq==1.6.0
+google-genai==2.18.1

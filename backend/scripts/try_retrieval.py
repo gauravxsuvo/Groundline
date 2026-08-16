@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -15,33 +16,35 @@ from app.retrieval.loader import load_chunks
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 
-TEST_QUERIES = [
-    "what direction does phloem flow",
-    "how many calories in a banana",
-    "symptoms of type 2 diabetes",
-    "distance from earth to the moon",
-    "how to boil an egg",
-    "who wrote the declaration of independence",
-]
-
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--strategy", default="passage_native")
-    parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument("--top-k", type=int, default=3)
     args = parser.parse_args()
 
     strategy_dir = DATA_DIR / args.strategy
+    if not strategy_dir.exists():
+        raise SystemExit(f"No index found at {strategy_dir}, run build_index.py first")
+
+    print(f"Loading '{args.strategy}' index...")
     chunks = load_chunks(strategy_dir)
     faiss_index = index_module.load_index(strategy_dir / "dense.faiss")
     bm25_index = search_module.load_bm25_index(strategy_dir / "bm25")
+    print(f"Ready, {len(chunks)} chunks loaded. Type a question, or 'quit' to exit.\n")
 
-    print(f"Loaded {len(chunks)} chunks for strategy '{args.strategy}'\n")
+    while True:
+        try:
+            query = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            break
+        if not query or query.lower() in {"quit", "exit"}:
+            break
 
-    for query in TEST_QUERIES:
+        t0 = time.time()
         query_embedding = embed.embed_texts([query])[0]
-        # Production fusion weights, so a sanity check reflects what the
-        # pipeline actually ranks with rather than the 1:1 library default.
+        # Production fusion weights, so this reflects what the pipeline
+        # actually ranks with rather than the 1:1 library default.
         results = search_module.hybrid_search(
             query_embedding,
             query,
@@ -52,13 +55,12 @@ def main() -> None:
             sparse_weight=settings.rrf_sparse_weight,
             rrf_k=settings.rrf_k,
         )
+        elapsed_ms = (time.time() - t0) * 1000
 
-        print(f"Query: {query}")
         for rank, (chunk_idx, score) in enumerate(results, start=1):
             chunk = chunks[chunk_idx]
-            snippet = chunk.text[:160].replace("\n", " ")
-            print(f"  {rank}. [{score:.4f}] {snippet}")
-        print()
+            print(f"  {rank}. [{score:.4f}] {chunk.text[:220]}")
+        print(f"  ({elapsed_ms:.0f}ms)\n")
 
 
 if __name__ == "__main__":

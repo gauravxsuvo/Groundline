@@ -1,0 +1,23 @@
+.git/
+.claude/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+backend/data/
+backend/tests/
+backend/.env
+
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+docs/
+brand/
+*.md
+!README.md
+
+task 2_ hhg.docx
+.env
+.env.local

@@ -1,0 +1,26 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Instrument Sans", system-ui, sans-serif;
+
+  --color-ink: #17140f;
+  --color-paper: #f8f4ec;
+  --color-accent: #c26a1e;
+  --color-muted: #6b6358;
+  --color-line: #e7e0d3;
+  --color-panel: #ffffff;
+  --color-danger: #b3432f;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}

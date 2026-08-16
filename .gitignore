@@ -23,6 +23,7 @@ backend/data/
 # Local agent context, not for the public repo
 CLAUDE.md
 AGENT.md
+portway-hosting-guide.md
 
 # Editor / OS
 .vscode/
