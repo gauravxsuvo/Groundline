@@ -32,13 +32,15 @@ The repo has no separate English file. It's 13 per-language parquet files under 
 - Phase 1 plan: pull `train/urdtrain.parquet` (smallest), project to just `query_id, query_type, Eng_Query, Eng_Answer, passages.English_passages, passages.is_selected`, then sample down to the target corpus size (tens of thousands of chunks, exact number to be decided against Render's free-tier memory budget in Phase 1).
 
 ## Phase 1 - Data & retrieval core
-Status: not started
+Status: done
 
-- [ ] Sample and clean the English corpus subset
-- [ ] Implement the 5 chunking strategies (fixed-size sliding window, sentence-aware semantic, passage-native, metadata-aware, hierarchical parent/child)
-- [ ] Build FAISS dense index (bge-small-en-v1.5 via fastembed) and bm25s sparse index
-- [ ] Push index artifacts to a Hugging Face Hub dataset repo
-- [ ] Hybrid retrieval with reciprocal rank fusion, sanity-checked on hand-picked queries
+- [x] Sample and clean the English corpus subset (5,000 rows pulled from `train/urdtrain.parquet`, English-only leaf columns projected to avoid the 1.7GB translation column)
+- [x] Implement the 5 chunking strategies (fixed-size sliding window, sentence-aware semantic, passage-native, metadata-aware, hierarchical parent/child) - see `backend/app/retrieval/chunking/`
+- [x] Build FAISS dense index (bge-small-en-v1.5 via fastembed) and bm25s sparse index - `backend/scripts/build_index.py`, chunk counts: passage_native/metadata_aware/hierarchical 49,885 each, fixed_window 65,691, semantic 68,938
+- [x] Push index artifacts to a Hugging Face Hub dataset repo - `gauravxsuvo/groundline-index` on Hugging Face Hub, 740MB across 25 LFS files, pushed via `backend/scripts/push_to_hf.py`
+- [x] Hybrid retrieval with reciprocal rank fusion, sanity-checked on hand-picked queries - `backend/scripts/sanity_check_retrieval.py`, all 5 strategies verified against 6 hand-picked queries, results topically correct across the board
+
+Known follow-up: `hierarchical` strategy stores the full parent context duplicated in every child chunk's metadata (227MB vs ~115MB for the other passage-level strategies), worth deduplicating into a separate parent lookup if `hierarchical` is the strategy chosen for production in a later phase.
 
 ## Phase 2 - Guardrails and harness skeleton
 Status: not started
