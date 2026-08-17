@@ -1,3 +1,18 @@
+---
+title: Groundline
+colorFrom: gray
+colorTo: indigo
+sdk: docker
+app_port: 8000
+header: mini
+fullWidth: true
+pinned: false
+short_description: Voice RAG that verifies every answer against retrieved evidence
+startup_duration_timeout: 1h
+datasets:
+  - gauravxsuvo/groundline-index
+---
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="brand/banner-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="brand/banner-light.svg">
