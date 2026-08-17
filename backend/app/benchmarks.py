@@ -41,8 +41,11 @@ class Benchmarks(BaseModel):
     quality: RetrievalQuality
 
 
-# passage_native, 150 queries, retrieval only (embed, hybrid search, fusion).
-RETRIEVAL_LATENCY = RetrievalLatency(p50_ms=35.0, p70_ms=42.8, p100_ms=72.2, queries=150)
+# passage_native, 150 queries, retrieval only (embed, hybrid search, fusion),
+# with one strategy bundle resident, which is what a deployed container runs.
+# The five-strategy comparison sweep in the latency report holds all five at
+# once and reads higher for that reason; see the note there.
+RETRIEVAL_LATENCY = RetrievalLatency(p50_ms=5.9, p70_ms=6.3, p100_ms=12.1, queries=150)
 
 # passage_native, 1200 labelled queries, scored against MS MARCO is_selected.
 RETRIEVAL_QUALITY = RetrievalQuality(recall_at_5=0.891, mrr_at_5=0.621, queries=1200)

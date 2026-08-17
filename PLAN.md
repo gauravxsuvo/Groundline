@@ -179,6 +179,20 @@ The number was in `docs/latency-report.md` and nowhere a reviewer would see it w
 - [x] The answer now shows the quoted supporting span, and the sources panel highlights that span inside the passage it was taken from, matched the same way the backend verifies it.
 - [x] Layout reworked to a flat grid with explicit placement, so reading order can differ per width: phone gets ask, answer, sources, latency; 640px pairs ask and latency; 1024px is the three column layout. Checked at 390, 768, 1440 and 1920 with screenshots at each, in the empty, answered, refused and off-topic states.
 
+## Phase 6.7 - Thread oversubscription
+Status: done
+
+Came out of a question about whether a bigger corpus would fit, which meant profiling retrieval per component, which turned up FAISS search costing 31.7ms inside the pipeline and 1.7ms alone. Flat search is a matrix multiply whose cost is data independent, so that gap was environmental.
+
+- [x] **FAISS and ONNX Runtime were both taking every core, back to back, on one short query.** Forking a 24 thread OpenMP team for a 384 float vector against 50k rows costs more than the arithmetic saves, and ORT's threads are still spinning down when FAISS asks for the cores. `faiss.omp_set_num_threads(1)` in `retrieval/index.load_index`, exposed as `faiss_threads` in config.
+- [x] Single threaded wins at every thread count tested, including 2, which is what the deployed instance has, so this is a portable default rather than a tweak for a 24 core desktop. Nothing here searches in batches, which is the case where the threads would pay for themselves.
+- [x] Retrieval-only P50 35.0ms to 5.9ms, P100 72.2ms to 12.1ms. Retrieval stage inside the full path 66.2ms to 5.8ms, measured through a different code path and agreeing.
+- [x] Quality re-checked rather than assumed: `eval_retrieval.py` gives recall@5 0.891 / MRR@5 0.621, identical to before. Thread count changes scheduling, not arithmetic.
+- [x] Found a reporting trap while merging the numbers: the five-strategy sweep holds all five bundles in one process, around 400MB of vectors, and now reads two to three times higher than a single resident index because a single-threaded scan is sensitive to that memory pressure. The comparison between strategies is still fair; the sweep figure is not the one to quote for a deployed index. Both are in `docs/latency-report.md`, labelled.
+- [x] `docs/latency-report.md` regenerated to a scratch path and merged by hand, since that file is generator output plus sections added since. Noted in AGENT.md so the next run does not overwrite the analysis.
+
+Also settled, since it was the question that started this: nothing in this system is trained, so there is nothing to train further. The embedding model is frozen and pre-trained, FAISS and BM25 are indexes rather than models, and generation is a hosted API. A GPU only speeds up the offline embedding pass when rebuilding the index, and would go in `requirements-dev.txt` alone, never `requirements.txt`, since the deployed container has no GPU and embeds one short query per request. Corpus size is the lever that would change answer coverage, and measured component memory (chunk objects 147MB, FAISS 77MB, BM25 23MB at 49,885 chunks, against a fixed 190MB for Python and the embedding model) puts the ceiling near 110,000 chunks in Portway's 1GB, roughly 2x. Not done: doubling coverage does not change the demo experience, since a visitor's invented questions mostly miss a 5,000 row sample either way, and the risk of touching every reported number days before the deadline is not worth it.
+
 ## Phase 7 - Polish and submission
 Status: in progress
 

@@ -32,7 +32,7 @@ The third check exists because the first two both passed a real hallucination. A
 
 ## Latency
 
-The task asks for the full pipeline, chunking through final output, under 200ms. That's realistic for retrieval alone, not for a network round trip to an LLM. We report both numbers honestly rather than picking whichever one looks better: the in-process path (retrieval, fusion and every guardrail, targeted to land under 200ms and measured at **35ms P50, 72ms P100**) and the network calls to speech-to-text and generation, timed separately on every query and never folded into that figure. The live UI makes the same split, per query. Numbers across a real query set, not a cherry-picked run, are in `docs/latency-report.md`.
+The task asks for the full pipeline, chunking through final output, under 200ms. That's realistic for retrieval alone, not for a network round trip to an LLM. We report both numbers honestly rather than picking whichever one looks better: the in-process path (retrieval, fusion and every guardrail, targeted to land under 200ms and measured at **5.9ms P50, 12.1ms P100**) and the network calls to speech-to-text and generation, timed separately on every query and never folded into that figure. The live UI makes the same split, per query. Numbers across a real query set, not a cherry-picked run, are in `docs/latency-report.md`.
 
 ## Running it locally
 

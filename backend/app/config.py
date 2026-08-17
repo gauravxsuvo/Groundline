@@ -37,6 +37,25 @@ class Settings(BaseSettings):
     # a ~200MB lazy load that otherwise lands entirely on whoever asks first.
     warm_start: bool = True
 
+    # FAISS search threads. One, not "all of them", and this is worth 24ms.
+    #
+    # FAISS and ONNX Runtime both default to every core, and this pipeline runs
+    # them back to back on one short query. Measured on a 24 core machine: the
+    # same search takes 1.7ms in isolation, 24.7ms immediately after an embed
+    # call. Forking an OpenMP team of 24 threads to multiply one 384 float
+    # vector against 50k rows costs far more in fork/join and cache traffic
+    # than the arithmetic itself, and ORT's own threads are still spinning down
+    # when FAISS asks for the cores. Timing the pair across both settings:
+    #
+    #   ORT default, FAISS 24 (the old default)   embed 2.9ms + search 24.7ms
+    #   ORT default, FAISS 1                      embed 2.4ms + search  2.6ms
+    #
+    # This matters more on the deployed 2 CPU instance, not less: there is no
+    # spare core there to absorb the oversubscription. Batch workloads would
+    # want the threads back, but nothing here searches in batches, every path
+    # is one query at a time.
+    faiss_threads: int = 1
+
     # Guardrails
     # Off-topic gate on raw BM25 top score (see guardrails/input_guard.py for
     # why: RRF's fused score can't be thresholded, and dense cosine similarity

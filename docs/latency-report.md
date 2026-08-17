@@ -9,17 +9,29 @@ The task scopes 200ms as chunking through final output, which literally includes
 - **Retrieval-only path** (embed query, hybrid search, RRF fusion): this is what's targeted to actually land under 200ms, and doubles as a fast extractive answer mode (best passage returned directly, no LLM).
 - **Full path** (retrieval plus Groq/Gemini generation): reported honestly as the richer, slower mode.
 
+## Retrieval-only latency, production configuration
+
+`passage_native`, one strategy bundle resident, which is what a deployed container runs. 150 queries, local compute only. This is the number reported in the UI and the one the 200ms target is claimed against.
+
+| Metric | P50 (ms) | P70 (ms) | P100 (ms) | Mean (ms) | n |
+|---|---|---|---|---|---|
+| Retrieval stage | 5.9 | 6.3 | 12.1 | 6.1 | 150 |
+
+Reproduced across two runs, and it agrees with the `retrieval` row of the full-path per-stage table below (P50 5.8ms), which is measured in the same one-bundle configuration through a different code path.
+
 ## Retrieval-only latency by chunking strategy
 
 150 queries per strategy, same query sample across all five, local compute only (no network calls).
 
 | Strategy | Chunks | P50 (ms) | P70 (ms) | P100 (ms) | Mean (ms) | Under 200ms |
 |---|---|---|---|---|---|---|
-| passage_native (production) | 49885 | 35.0 | 42.8 | 72.2 | 38.0 | yes |
-| metadata_aware | 49885 | 27.7 | 31.9 | 66.9 | 27.9 | yes |
-| hierarchical | 49885 | 32.2 | 35.3 | 69.9 | 34.5 | yes |
-| fixed_window | 65691 | 33.3 | 36.2 | 69.4 | 37.5 | yes |
-| semantic | 68938 | 34.9 | 42.7 | 67.4 | 40.2 | yes |
+| passage_native (production) | 49885 | 15.3 | 17.1 | 29.4 | 15.2 | yes |
+| metadata_aware | 49885 | 16.2 | 17.8 | 27.4 | 16.1 | yes |
+| hierarchical | 49885 | 13.7 | 15.8 | 23.8 | 14.1 | yes |
+| fixed_window | 65691 | 20.6 | 22.7 | 30.8 | 20.9 | yes |
+| semantic | 68938 | 16.0 | 18.0 | 33.3 | 16.5 | yes |
+
+This sweep reads two to three times higher than the production number above, and the gap is the sweep's own doing: it holds all five bundles in one process, around 400MB of vectors, and a single-threaded flat scan is sensitive to that memory pressure in a way the old 24-thread configuration masked. The comparison between strategies is still valid, since every row pays the same penalty. It is not the number to quote for one deployed index.
 
 **Production strategy: `passage_native`.** See PLAN.md Phase 4 notes for the reasoning.
 
@@ -29,19 +41,21 @@ The task scopes 200ms as chunking through final output, which literally includes
 
 | Metric | P50 (ms) | P70 (ms) | P100 (ms) | Mean (ms) | n |
 |---|---|---|---|---|---|
-| Total | 3731.7 | 4941.5 | 7001.5 | 3528.6 | 40 |
+| Total | 1323.5 | 3570.1 | 11801.8 | 2337.2 | 20 |
 
-Refused (off-topic or ungrounded): 7/40. Generation provider split: {'groq': 40}.
+Refused (off-topic or ungrounded): 5/20. Generation provider split: {'groq': 20}.
 
 ### Per-stage breakdown (full path)
 
 | Stage | P50 (ms) | P70 (ms) | P100 (ms) | Mean (ms) |
 |---|---|---|---|---|
-| input_guard | 0.1 | 0.1 | 0.4 | 0.1 |
-| retrieval | 66.2 | 66.5 | 68.3 | 62.8 |
-| relevance_guard | 0.0 | 0.0 | 0.1 | 0.0 |
-| generation | 3666.0 | 4874.3 | 6965.1 | 3465.4 |
-| output_guard | 0.1 | 0.1 | 0.1 | 0.1 |
+| input_guard | 0.0 | 0.0 | 0.1 | 0.0 |
+| retrieval | 5.8 | 5.9 | 14.0 | 6.4 |
+| relevance_guard | 0.0 | 0.0 | 0.0 | 0.0 |
+| generation | 1317.5 | 3564.1 | 11796.0 | 2330.6 |
+| output_guard | 0.1 | 0.1 | 0.2 | 0.1 |
+
+Everything the pipeline controls is now inside 6ms at the median. The spread on the total is entirely generation, and it is provider throttling rather than anything in this codebase: the first ten queries of this run returned in 483 to 1324ms, then the token budget ran down and the back half landed at 2.6 to 4.6s, with one outlier at 11.8s. Read the P50 as what an interactive demo sees and the P100 as what sustained load does to a free tier.
 
 STT (Sarvam) latency isn't included in the numbers above since this benchmark runs text queries at volume; the audio path was verified end to end in Phase 3 (`run_harness.py --audio`) but isn't re-benchmarked here at scale to avoid burning Sarvam's free-tier minutes on synthetic load.
 
@@ -77,6 +91,25 @@ A first run of this benchmark sent all 40 full-path queries back to back with no
 ## Guardrail calibration, checked against this query set
 
 Phase 2 set `grounding_overlap_threshold=0.6` against a handful of hand-picked queries and flagged it for revisiting once a larger, real query set was available. Checked against the unpaced 40-query run: every refused answer's lexical overlap with retrieved context was 0.59 or below, and every passed answer was 0.64 or above, a clean gap with the threshold sitting inside it. No change made; the provisional value holds up. Separately, none of those 40 (all genuine on-topic MS MARCO queries) were rejected by the off-topic guardrail, zero false positives there either. One caveat worth recording: generation runs at `temperature=0.2`, so the same query can land on either side of the grounding threshold across repeated runs when its overlap score sits near the boundary (the refused count moved from 8/40 to 7/40 between the unpaced and paced full-path runs over the same 40 queries). That's inherent LLM sampling variance, not guardrail noise.
+
+## Thread oversubscription, the largest single win in the retrieval path
+
+Profiling the retrieval stage per component turned up an inconsistency worth chasing: FAISS search measured 31.7ms inside the pipeline and 1.7ms when run on its own, against the same index, for the same work. Flat inner-product search is a matrix multiply whose cost does not depend on the data, so a 19x difference had to be environmental.
+
+It was. FAISS and ONNX Runtime both default to every available core, and this pipeline runs them back to back on a single short query. Timing the pair across both settings, on a 24 core machine:
+
+| ORT threads | FAISS threads | embed | search | total |
+|---|---|---|---|---|
+| default | 24 (the old default) | 2.88ms | 24.70ms | 28.91ms |
+| default | 4 | 2.95ms | 6.66ms | 10.00ms |
+| default | 1 | 2.44ms | 2.63ms | 5.25ms |
+| 4 | 24 | 3.20ms | 1.75ms | 4.93ms |
+
+Forking an OpenMP team of 24 threads to multiply one 384 float vector against 50,000 rows costs far more in fork/join and cache traffic than the arithmetic saves, and ORT's threads are still spinning down when FAISS asks for the cores. The fix is `faiss.omp_set_num_threads(1)`, applied in `retrieval/index.load_index` and configurable as `faiss_threads`.
+
+Two things make single-threaded the right default rather than a machine-specific tweak. It wins at every thread count tested, including at 2 threads (6.40ms against 10.21ms), which is what the deployed instance has; oversubscription hurts more on a small box, not less. And nothing in this system searches in batches, where the threads would earn their keep. Every path, serving and evaluation alike, is one query at a time.
+
+Retrieval-only P50 went from 35.0ms to 5.9ms, and the retrieval stage inside the full path from 66.2ms to 5.8ms. Retrieval quality is unaffected and was re-checked rather than assumed: thread count changes scheduling, not arithmetic, and `eval_retrieval.py` returns recall@5 0.891 / MRR@5 0.621, identical to before.
 
 ## Tuning applied
 
