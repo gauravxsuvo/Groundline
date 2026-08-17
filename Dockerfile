@@ -6,17 +6,27 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM python:3.14-slim AS backend
-WORKDIR /app
 
-COPY backend/requirements.txt backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+# The container runs as uid 1000, so everything the app reads or writes has to
+# belong to that user. Create it up front and use --chown on the way in rather
+# than chowning afterwards: a recursive chown over the baked index would copy
+# all 111MB of it into a second layer just to change its metadata.
+RUN useradd -m -u 1000 user
+USER user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH \
+    PYTHONUNBUFFERED=1
+WORKDIR /home/user/app
 
-COPY backend/app backend/app
-COPY backend/scripts backend/scripts
-COPY --from=frontend-build /app/frontend/dist frontend/dist
+COPY --chown=user backend/requirements.txt backend/requirements.txt
+RUN pip install --no-cache-dir --user -r backend/requirements.txt
 
-WORKDIR /app/backend
-ENV PYTHONUNBUFFERED=1
+COPY --chown=user backend/app backend/app
+COPY --chown=user backend/scripts backend/scripts
+COPY --from=frontend-build --chown=user /app/frontend/dist frontend/dist
+
+WORKDIR /home/user/app/backend
+
 # The Hugging Face CDN drops long transfers on a slow link, and the index is
 # 111MB. The default read timeout is 10 seconds, which turns an ordinary stall
 # into a failed download; pull_index.py retries either way, but fewer stalls
@@ -44,6 +54,10 @@ ENV HF_HUB_DISABLE_XET=1
 # here moves that dependency to build time, where a failure is visible to
 # whoever is watching the build instead of taking a running deployment down.
 #
+# It matters more on Spaces than it did before, because a Space's disk does not
+# survive a restart. Anything not in the image is fetched again every time the
+# Space wakes from sleep.
+#
 # Deliberately best effort. If the CDN is slow or down while building, the build
 # still succeeds and the container falls back to fetching at startup exactly as
 # it used to, which is no worse than before. pull_index.py checks for every file
@@ -57,7 +71,7 @@ ENV HF_HUB_DISABLE_XET=1
 # slower to notice and counts against whatever startup deadline the host
 # applies. These are ceilings, not waits: a healthy CDN finishes in a couple of
 # minutes and the build moves on.
-ENV EMBED_CACHE_DIR=/app/backend/.fastembed
+ENV EMBED_CACHE_DIR=/home/user/app/backend/.fastembed
 RUN timeout 2400 python scripts/pull_index.py \
     || echo "WARNING: index not baked into the image, it will be pulled at startup"
 RUN timeout 900 python -c "from app.retrieval import embed; embed.warmup()" \
