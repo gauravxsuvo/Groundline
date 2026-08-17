@@ -17,6 +17,6 @@ brand/
 *.md
 !README.md
 
-task 2_ hhg.docx
+*.docx
 .env
 .env.local

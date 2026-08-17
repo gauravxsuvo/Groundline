@@ -134,7 +134,7 @@ class Settings(BaseSettings):
     # pick) got restricted to existing users only sometime between Phase 0 and
     # Phase 3 of this same build. Pointing at Google's "latest lite" alias
     # instead of a fixed version is the more durable choice for a fallback
-    # provider we need to keep working through the submission deadline.
+    # provider that needs to keep working without maintenance.
     gemini_model: str = "gemini-flash-lite-latest"
 
     # Hugging Face Hub, index artifacts. Defaulted rather than left blank so the

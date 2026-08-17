@@ -1,25 +1,10 @@
----
-title: Groundline
-colorFrom: gray
-colorTo: indigo
-sdk: docker
-app_port: 8000
-header: mini
-fullWidth: true
-pinned: false
-short_description: Voice RAG that verifies every answer against retrieved evidence
-startup_duration_timeout: 1h
-datasets:
-  - gauravxsuvo/groundline-index
----
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="brand/banner-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="brand/banner-light.svg">
   <img alt="Groundline" src="brand/banner-light.svg">
 </picture>
 
-A voice-enabled retrieval-augmented generation system built for HH Goa 2026, Task 2. You speak a question, it gets transcribed, retrieved against a corpus built from AI4Bharat's MSMARCO-XI dataset, and answered with citations back to the source passages. The name comes from the core guarantee: every answer is grounded in retrieved evidence, or it says so instead of guessing.
+A voice-enabled retrieval-augmented generation system. You speak a question, it gets transcribed, retrieved against a corpus built from AI4Bharat's MSMARCO-XI dataset, and answered with citations back to the source passages. The name comes from the core guarantee: every answer is grounded in retrieved evidence, or it says so instead of guessing.
 
 ## What it does
 
@@ -47,16 +32,18 @@ The third check exists because the first two both passed a real hallucination. A
 
 ## Latency
 
-The task asks for the full pipeline, chunking through final output, under 200ms. That's realistic for retrieval alone, not for a network round trip to an LLM. We report both numbers honestly rather than picking whichever one looks better: the in-process path (retrieval, fusion and every guardrail, targeted to land under 200ms and measured at **5.9ms P50, 12.1ms P100**) and the network calls to speech-to-text and generation, timed separately on every query and never folded into that figure. The live UI makes the same split, per query. Numbers across a real query set, not a cherry-picked run, are in `docs/latency-report.md`.
+The design target is the full pipeline, chunking through final output, under 200ms. That's realistic for retrieval alone, not for a network round trip to an LLM. Both numbers are reported honestly rather than picking whichever one looks better: the in-process path (retrieval, fusion and every guardrail, targeted to land under 200ms and measured at **5.9ms P50, 12.1ms P100**) and the network calls to speech-to-text and generation, timed separately on every query and never folded into that figure. The live UI makes the same split, per query. Numbers across a real query set, not a cherry-picked run, are in `docs/latency-report.md`.
 
 ## Running it locally
 
 ```
 cd backend
 pip install -r requirements.txt
-python scripts/build_index.py   # needs requirements-dev.txt first, builds the retrieval index once
+python scripts/pull_index.py    # downloads the prebuilt retrieval index, about 111MB
 uvicorn app.main:app --reload
 ```
+
+To build the index from the source dataset yourself instead of downloading it, install `requirements-dev.txt` and run `python scripts/build_index.py`. That reproduces all five chunking strategies and takes considerably longer than the pull.
 
 ```
 cd frontend
@@ -64,7 +51,7 @@ npm install
 npm run dev
 ```
 
-Copy `.env.example` to `.env` and fill in `SARVAM_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, and `HF_TOKEN`.
+Copy `.env.example` to `.env` and fill in `SARVAM_API_KEY`, `GROQ_API_KEY`, and `GEMINI_API_KEY`. `HF_TOKEN` is optional: the index lives in a public dataset repo, so pulling it needs no credentials.
 
 ## Checking it
 
@@ -82,8 +69,13 @@ The first two need no API keys and the first needs no index either.
 
 FastAPI backend, React and Vite frontend, FAISS and BM25 for retrieval, Sarvam for speech-to-text, Groq and Gemini for generation. See `AGENT.md` for the full architecture map.
 
-## Live demo
+## Running it with Docker
 
-Deployed as a single web service from the repo's `Dockerfile`. Link: TBD.
+The `Dockerfile` builds the frontend and backend into one image that serves both:
 
-If the first request feels slow, that's a cold start (container boot plus pulling the retrieval index), not the pipeline itself.
+```
+docker build -t groundline .
+docker run -p 8000:8000 --env-file backend/.env groundline
+```
+
+The build bakes the retrieval index and the embedding model into the image, so the container starts without needing to fetch anything. If that download fails while building, the build still succeeds and the container fetches what it is missing on first boot instead.

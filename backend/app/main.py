@@ -53,7 +53,7 @@ class MetaResponse(BaseModel):
     """What the system is running, so the UI can state it rather than assert it.
 
     The UI reports a 200ms retrieval result on every answer. That claim is only
-    readable if a reviewer can also see which stages it covers and which ones
+    readable if the caller can also see which stages it covers and which ones
     are network calls that were deliberately left out of it, so the stage split
     is served from here rather than duplicated as frontend copy.
     """

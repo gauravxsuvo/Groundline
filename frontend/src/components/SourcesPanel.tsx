@@ -31,7 +31,7 @@ function Passage({ text, evidence, cited }: { text: string; evidence: string; ci
 
   // Every passage scrolls inside a fixed height so the rail stays one even
   // row. That can hide the quote the answer rests on, which is the line a
-  // reviewer most wants to see, so nudge it into view. Done by setting
+  // reader most wants to see, so nudge it into view. Done by setting
   // scrollTop on the passage itself rather than calling scrollIntoView, which
   // is free to scroll the whole page as well and would yank the reader down to
   // the sources the moment an answer arrives.

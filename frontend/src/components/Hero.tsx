@@ -86,7 +86,7 @@ export function Hero({ meta }: { meta: Meta | null }) {
           </a>
         </div>
 
-        {/* The three figures a reviewer is looking for, before any scrolling.
+        {/* The three figures worth seeing first, before any scrolling.
             All measured, all served by GET /api/meta, so they cannot drift from
             what the backend is actually running. */}
         <div className="mt-14 border-t border-line pt-2 sm:mt-16">

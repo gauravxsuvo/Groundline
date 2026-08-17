@@ -5,7 +5,7 @@ import { Section, SectionHeading } from './Section'
 
 /** The path a question takes, with the boundary drawn where it matters.
  *
- *  A reviewer reading "under 200ms" should be able to see at a glance which of
+ *  Someone reading "under 200ms" should be able to see at a glance which of
  *  these steps that covers, without taking the claim on trust. Local steps are
  *  the ones inside the target; the two network steps are marked as such.
  */

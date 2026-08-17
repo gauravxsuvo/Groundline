@@ -28,7 +28,7 @@ export function Section({ id, tone = 'paper', className, children }: SectionProp
 /** Eyebrow, headline, and a paragraph of context, in that order every time.
  *
  *  The eyebrow says which part of the system this is, the headline states the
- *  claim, the paragraph backs it. A reviewer scanning only the headlines should
+ *  claim, the paragraph backs it. Someone scanning only the headlines should
  *  still come away with the argument.
  */
 export function SectionHeading({

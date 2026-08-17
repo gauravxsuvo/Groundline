@@ -77,4 +77,4 @@ That spend buys the failure above being caught, and it stays inside the retrieva
 
 A quote that is real but does not state the claim still passes the check in code, and is only caught by the model's own judgement about whether the span it copied answers the question. The Yucaipa case is close to this line: the evidence copied is a sentence about the San Bernardino County Sheriff's Department serving the city, which strongly implies the county but does not name it as such in the form the question asks.
 
-Closing that gap properly means checking entailment between the span and the claim, which needs an entailment model in the loop and is out of scope for this build. Recorded here rather than left for a reviewer to discover.
+Closing that gap properly means checking entailment between the span and the claim, which needs an entailment model in the loop and is out of scope for this build. Recorded here rather than left for a reader to discover.

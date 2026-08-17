@@ -7,10 +7,10 @@ RUN npm run build
 
 FROM python:3.14-slim AS backend
 
-# The container runs as uid 1000, so everything the app reads or writes has to
-# belong to that user. Create it up front and use --chown on the way in rather
-# than chowning afterwards: a recursive chown over the baked index would copy
-# all 111MB of it into a second layer just to change its metadata.
+# Run as a non-root user rather than root, which is the default and a bad one.
+# Create it up front and use --chown on the way in rather than chowning
+# afterwards: a recursive chown over the baked index would copy all 111MB of it
+# into a second layer just to change its metadata.
 RUN useradd -m -u 1000 user
 USER user
 ENV HOME=/home/user \
@@ -52,11 +52,7 @@ ENV HF_HUB_DISABLE_XET=1
 # first use. That makes booting depend on somebody else's CDN being healthy at
 # that moment, and when it is not, the container simply cannot start. Doing it
 # here moves that dependency to build time, where a failure is visible to
-# whoever is watching the build instead of taking a running deployment down.
-#
-# It matters more on Spaces than it did before, because a Space's disk does not
-# survive a restart. Anything not in the image is fetched again every time the
-# Space wakes from sleep.
+# whoever is watching the build instead of leaving a container unable to start.
 #
 # Deliberately best effort. If the CDN is slow or down while building, the build
 # still succeeds and the container falls back to fetching at startup exactly as

@@ -5,7 +5,7 @@ These are not computed per request. They come out of the two offline scripts,
 against a fixed query sample, and they are written up in `docs/latency-report.md`
 and `docs/retrieval-quality.md`. They live here so the UI can state the 200ms
 result and the retrieval accuracy next to the live per-query numbers, instead of
-a reviewer having to open the repo to find out whether the target was met.
+anyone having to open the repo to find out whether the target was met.
 
 When retrieval changes, re-run both scripts and update the docs and these
 constants together. Everything here is a measurement, so nothing in this file

@@ -2,9 +2,7 @@
 
 Full architecture rationale is in `AGENT.md`. This file tracks what's done, what's next, phase by phase. Update it at the end of every work session so the next one picks up without re-deriving context.
 
-Deadline: August 22, 2026, 11:59 PM. No resubmissions.
-
-Project name: Groundline. Plain English, no Indic-language name since the demo itself runs English only (the dataset is Indic-sourced, but that's not the same as the demo language, an Indic name would invite an awkward question from judges). Ties to the core guarantee: every answer is grounded in retrieved evidence, or the system says so instead of guessing.
+Project name: Groundline. Plain English, no Indic-language name since the demo itself runs English only (the dataset is Indic-sourced, but that's not the same as the demo language, an Indic name would invite an awkward question about what language the demo actually speaks). Ties to the core guarantee: every answer is grounded in retrieved evidence, or the system says so instead of guessing.
 
 Brand assets are done: `brand/` has the mark, logo, and README banner (light and dark, switches with GitHub's theme via `<picture>`), plus a small brand guide with the color tokens. Hand-written SVG, no build step, no external fonts. Reuse the same tokens for the frontend UI in Phase 5 instead of picking new colors.
 
@@ -64,7 +62,7 @@ Status: done
 - [x] Groq generation wired in with structured JSON output (answer, citation, grounded, confidence), Gemini as automatic fallback, extractive stand-in as final fallback if both fail - `backend/app/providers/groq_llm.py`, `gemini_llm.py`, `harness/stages.py`
 - [x] End-to-end CLI test: audio file in, structured grounded answer out - verified with a Windows-TTS-synthesized WAV through `backend/scripts/run_harness.py --audio`
 
-Model picks, checked live against the actual keys rather than trusted from Phase 0 research: Groq uses `openai/gpt-oss-20b`, not the originally planned Llama 3.1 8B, it's both the fastest model on Groq's free tier *and* one of only two models (with 120b) that support strict `json_schema` structured outputs, so correctness and latency point the same direction. Gemini's `gemini-2.5-flash-lite` (the Phase 0 pick) had already been restricted to existing users only by the time Phase 3 was built, one week later, confirmed by listing the actual key's available models; switched to `gemini-flash-lite-latest`, a rolling alias, specifically to reduce the odds of this breaking again before the submission deadline.
+Model picks, checked live against the actual keys rather than trusted from Phase 0 research: Groq uses `openai/gpt-oss-20b`, not the originally planned Llama 3.1 8B, it's both the fastest model on Groq's free tier *and* one of only two models (with 120b) that support strict `json_schema` structured outputs, so correctness and latency point the same direction. Gemini's `gemini-2.5-flash-lite` (the Phase 0 pick) had already been restricted to existing users only by the time Phase 3 was built, one week later, confirmed by listing the actual key's available models; switched to `gemini-flash-lite-latest`, a rolling alias, specifically to reduce the odds of this breaking again.
 
 Real bugs found and fixed by testing against live APIs instead of trusting the design on paper:
 - Groq's `max_tokens=512` truncated longer answers before valid JSON completed; raised to 1024.
@@ -106,12 +104,13 @@ Status: in progress
 - [x] `Dockerfile` at repo root (multi-stage: `node:22-slim` builds `frontend/dist`, `python:3.14-slim` runs the backend and serves it), `.dockerignore` to keep `backend/data/` (741MB locally) and other local-only content out of the build context
 - [x] `backend/scripts/pull_index.py` - pulls only the `default_strategy` subfolder from the `gauravxsuvo/groundline-index` HF Hub dataset repo at container start (not the full 740MB across all 5 strategies), idempotent if the target dir is already populated
 - [x] Verified locally with Docker Desktop: `docker build` succeeds cleanly on `python:3.14-slim`, every runtime dependency (including `pydantic-core`, a compiled Rust extension) resolved to a prebuilt `cp314` manylinux wheel, no compiler toolchain needed. A `--memory=512m` capped run (matching Render free tier's ceiling, used as a proxy before an actual hosting decision was settled) pulled the index (37s for ~115MB), served `/api/health`, the built frontend, and a real `/api/query` correctly, including a genuinely correct grounded refusal for "what is the capital of France" (corpus never states it directly).
-- [ ] Env vars set in the hosting dashboard
-- [ ] Live URL verified end to end, including a cold-start run
+- [x] Hosting dropped. The project runs locally, either from source or from the Docker image, and there is no deployed instance to maintain.
 
 Memory finding from the local test: idle memory is 298MB, but the first query (which lazy-loads the embedding model) pushes it to ~503MB, plateauing there over repeated queries rather than leaking. That was measured against a 512MB cap chosen to match Render's free tier before the hosting decision was final. Resolved: Portway's default instance is 1GB RAM / 2 CPU, roughly double the observed peak, comfortable headroom. No mitigation needed.
 
-Hosting platform: pivoted from the original Render free-tier plan to Portway (see `portway-hosting-guide.md` at repo root, gitignored alongside `CLAUDE.md`/`AGENT.md` since it's agent-facing operational guidance, not part of the submission). The existing `Dockerfile` already matches Portway's contract as-is (`EXPOSE 8000`, `CMD` binds to `${PORT:-8000}`), so no changes were needed there. `render.yaml` (Render Blueprint) was already written before the pivot and is left in place, unused by Portway's build detection, in case Render is revisited.
+Hosting was tried and then abandoned. Render first, then Portway, then Hugging Face Spaces. Every attempt failed on the same thing: the 111MB retrieval index had to cross the public internet from its Hugging Face dataset repo, and that transfer was measured anywhere between 14 KB/s and 535 KB/s within ten minutes, dying mid-stream often enough that a container could not reliably reach a serving state. Spaces would have solved it by putting the download inside HF's own network, but creating a Docker Space now requires a paid plan.
+
+What came out of the attempt is worth keeping even without a deployment. `pull_index.py` checks all seven artifacts by name rather than asking whether the directory is non-empty, which is what turned one interrupted download into a permanent crash loop. It downloads sequentially rather than eight files at once, so a stall costs one transfer instead of aborting the whole snapshot, and it retries ten times with backoff, resuming each time. The `Dockerfile` bakes the index and the embedding model into the image, best effort, so `docker run` starts without fetching anything. All of that makes the local Docker path solid, which is now the only path that matters.
 
 ## Phase 6.5 - Correctness and quality pass
 Status: done
@@ -157,7 +156,7 @@ Known gap, recorded rather than hidden: the grounding fix rests on the model's s
 ## Phase 6.6 - Grounding regression, UI clarity, tests
 Status: done
 
-Started as the frontend work for making the 200ms claim legible to a reviewer. Picking demo queries meant running them, and running them surfaced the regression below.
+Started as the frontend work for making the 200ms claim legible to a reader. Picking demo queries meant running them, and running them surfaced the regression below.
 
 ### The grounding regression, and why it could happen
 
@@ -169,7 +168,7 @@ Started as the frontend work for making the 200ms claim legible to a reviewer. P
 
 ### Making the 200ms claim legible
 
-The number was in `docs/latency-report.md` and nowhere a reviewer would see it without opening the repo, and the UI reported a single blended total that invited exactly the misreading the report was written to avoid.
+The number was in `docs/latency-report.md` and nowhere a visitor would see it without opening the repo, and the UI reported a single blended total that invited exactly the misreading the report was written to avoid.
 
 - [x] `GET /api/meta` serves the live config (strategy, chunk count, top_k, model names) plus the measured benchmark figures and the local/network stage split, so the UI states what the backend is running rather than carrying its own copy of it.
 - [x] `TargetStrip` at the top of the page: the measured retrieval P50 against the 200ms target, in a sentence, plus what that figure covers and the explicit statement that generation is a hosted call, timed separately and never counted against it.
@@ -193,13 +192,13 @@ Came out of a question about whether a bigger corpus would fit, which meant prof
 
 Also settled, since it was the question that started this: nothing in this system is trained, so there is nothing to train further. The embedding model is frozen and pre-trained, FAISS and BM25 are indexes rather than models, and generation is a hosted API. A GPU only speeds up the offline embedding pass when rebuilding the index, and would go in `requirements-dev.txt` alone, never `requirements.txt`, since the deployed container has no GPU and embeds one short query per request. Corpus size is the lever that would change answer coverage, and measured component memory (chunk objects 147MB, FAISS 77MB, BM25 23MB at 49,885 chunks, against a fixed 190MB for Python and the embedding model) puts the ceiling near 110,000 chunks in Portway's 1GB, roughly 2x. Not done: doubling coverage does not change the demo experience, since a visitor's invented questions mostly miss a 5,000 row sample either way, and the risk of touching every reported number days before the deadline is not worth it.
 
-## Phase 7 - Polish and submission
+## Phase 7 - Polish
 Status: in progress
 
 - [x] Repo cleanup pass against style rules (no em dash, no emoji, no AI-sounding text, no Claude trailers)
 - [x] README, AGENT.md, CLAUDE.md, `docs/` finalized
-- [ ] Submission checklist: repo link, live link, both videos, #RAGInGoa posts on Instagram/X/LinkedIn by every member, form submitted with buffer before the deadline
+- [x] De-branded into a standalone personal project, hosting dropped in favour of running it locally
 
 ## Open blockers
 
-Phase 6 needs the user to actually create the Portway project (repo URL, env vars from the Env tab) since that's a dashboard action, not something scriptable from here. Once live, confirm the URL end to end including a cold start.
+None. Hosting was the last open item and it has been dropped deliberately rather than left unfinished.

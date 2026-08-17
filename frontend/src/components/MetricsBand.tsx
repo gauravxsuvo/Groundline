@@ -7,7 +7,7 @@ import { Section, SectionHeading } from './Section'
 
 /** States the 200ms result plainly, and says exactly what it covers.
  *
- *  The task asks for the pipeline under 200ms. Retrieval meets that; a hosted
+ *  The design target is the pipeline under 200ms. Retrieval meets that; a hosted
  *  LLM call does not and cannot. Reporting one blended number would hide which
  *  is which, so both are reported and this section says which one the target is
  *  measured against, before anyone reads a per-query number.
@@ -128,8 +128,8 @@ export function MetricsBand({ meta }: { meta: Meta | null }) {
           />
         </div>
 
-        {/* The part that is easy to leave out and the first thing a reviewer
-            will check for. Said plainly rather than buried. */}
+        {/* The part that is easy to leave out and the first thing anyone
+            sceptical will check for. Said plainly rather than buried. */}
         <div
           className="mt-12 flex max-w-[76ch] flex-col gap-3 border-l-2 border-accent/40 py-1 pl-5"
           data-reveal
