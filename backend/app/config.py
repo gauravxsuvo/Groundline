@@ -56,6 +56,43 @@ class Settings(BaseSettings):
     # is one query at a time.
     faiss_threads: int = 1
 
+    # ONNX Runtime threads for the embedding model. Same problem as the FAISS
+    # setting above, and the one that actually bit in production.
+    #
+    # ORT sizes its thread pool from the core count it can see, and a container
+    # sees the host's cores, not its own CPU limit: inside a container capped at
+    # 2 CPUs on a 24 core host, `os.cpu_count()` still reports 24. So ORT builds
+    # a 24 thread pool to run one short query through a 33M parameter model,
+    # those threads contend for two cores' worth of quota, and the scheduler
+    # throttles the lot. It does not fail, it just gets slow and erratic.
+    #
+    # Measured against the deployed instance, retrieval ran 126ms to 457ms on
+    # identical input, with the giveaway that it scaled with query length:
+    # 3 words averaged 257ms, 60 words averaged 704ms. Only the transformer
+    # forward pass scales that way, FAISS and BM25 do not care how long the
+    # query is. Reproduced locally by running the same image with `--cpus=2`.
+    #
+    # One, not two, and measured the same way. Running the same image under
+    # `--cpus=2`, retrieval for a short query came out:
+    #
+    #   threads unset (ORT sees 24)   700-918ms
+    #   threads=2                      52-104ms
+    #   threads=1                       9-20ms
+    #
+    # Two threads is worse than one for the same reason 24 is worse than two:
+    # embedding one short query is a tiny amount of arithmetic, and forking an
+    # OpenMP team and synchronising it costs more than the work. Serving is
+    # always one short query at a time, so there is nothing to parallelise.
+    #
+    # Left as an explicit number rather than something derived, because there is
+    # no reliable way to read the container's real CPU allowance from inside it:
+    # os.cpu_count() reports the host, and process_cpu_count() respects affinity
+    # but not the cgroup quota.
+    #
+    # This is the serving value. Building the index is the opposite workload,
+    # 50k chunks in batches, and build_index.py raises it for that reason.
+    embed_threads: int = 1
+
     # Guardrails
     # Off-topic gate on raw BM25 top score (see guardrails/input_guard.py for
     # why: RRF's fused score can't be thresholded, and dense cosine similarity
