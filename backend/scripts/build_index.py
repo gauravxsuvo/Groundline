@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -9,6 +10,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.config import settings
 from app.retrieval import dataset, embed
 from app.retrieval import index as index_module
 from app.retrieval import search as search_module
@@ -22,6 +24,14 @@ OUT_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 def embed_in_batches(texts: list[str], batch_size: int = 256) -> np.ndarray:
     if not texts:
         return np.empty((0, 384), dtype="float32")
+
+    # `embed_threads` defaults to 1, which is right for serving one short query
+    # and badly wrong here: this embeds tens of thousands of chunks and is the
+    # one genuine batch workload in the project, so it wants every core it can
+    # get. Set before the first embed call, since the embedder is built lazily
+    # and cached on first use. See the comment on `embed_threads` in config.py.
+    settings.embed_threads = os.cpu_count() or 1
+
     vectors = [embed.embed_texts(texts[i : i + batch_size]) for i in range(0, len(texts), batch_size)]
     return np.vstack(vectors)
 

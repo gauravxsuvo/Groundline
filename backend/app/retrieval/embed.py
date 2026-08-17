@@ -5,12 +5,19 @@ from functools import lru_cache
 import numpy as np
 from fastembed import TextEmbedding
 
+from ..config import settings
+
 MODEL_NAME = "BAAI/bge-small-en-v1.5"
 
 
 @lru_cache(maxsize=1)
 def get_embedder() -> TextEmbedding:
-    return TextEmbedding(model_name=MODEL_NAME)
+    # `threads` is not optional in a container. Left unset, ONNX Runtime sizes
+    # its pool from the host's core count, which a container can see even when
+    # it is capped well below that, and the resulting oversubscription is the
+    # difference between a few milliseconds and a few hundred. See the comment
+    # on `embed_threads` in config.py for the measurement.
+    return TextEmbedding(model_name=MODEL_NAME, threads=settings.embed_threads)
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:
