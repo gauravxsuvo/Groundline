@@ -20,9 +20,9 @@ backend/data/
 *.index
 *.npy
 
-# Local agent context, not for the public repo
-CLAUDE.md
+# Local context and operational notes, not for the public repo
 AGENT.md
+portway-hosting-guide.md
 
 # Editor / OS
 .vscode/

@@ -1,0 +1,286 @@
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import random
+import statistics
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+from app.config import settings
+from app.harness import stages
+from app.harness.pipeline import Pipeline
+from app.retrieval import dataset as dataset_module
+from app.retrieval.loader import load_strategy_bundle
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+REPO_ROOT = BACKEND_DIR.parent
+QUERY_CACHE = BACKEND_DIR / "data" / "benchmark_queries.json"
+REPORT_PATH = REPO_ROOT / "docs" / "latency-report.md"
+
+# Matches the row count Phase 1 sampled into the index (see PLAN.md), so the
+# query pool is drawn from queries the corpus was actually built to answer.
+SAMPLE_ROWS = 5000
+STRATEGIES = ["passage_native", "metadata_aware", "hierarchical", "fixed_window", "semantic"]
+
+# Per-stage JSON logging is useful for a single debug run, not for hundreds of
+# benchmark queries; quiet it down here so the progress output stays readable.
+logging.getLogger("harness.pipeline").setLevel(logging.WARNING)
+logging.getLogger("harness.stages").setLevel(logging.WARNING)
+
+
+def load_query_pool(refresh: bool) -> list[dict]:
+    if QUERY_CACHE.exists() and not refresh:
+        return json.loads(QUERY_CACHE.read_text(encoding="utf-8"))
+
+    print(f"Pulling {SAMPLE_ROWS} source rows to build the benchmark query pool (one-time, then cached)...")
+    rows = list(dataset_module.iter_source_rows(limit=SAMPLE_ROWS))
+    pool = [{"query_id": r.query_id, "query_type": r.query_type, "query": r.eng_query} for r in rows if r.eng_query.strip()]
+    QUERY_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    QUERY_CACHE.write_text(json.dumps(pool, indent=2), encoding="utf-8")
+    print(f"Cached {len(pool)} queries to {QUERY_CACHE}")
+    return pool
+
+
+def sample_queries(pool: list[dict], n: int, seed: int) -> list[dict]:
+    rng = random.Random(seed)
+    return rng.sample(pool, min(n, len(pool)))
+
+
+def percentile(values: list[float], pct: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    idx = min(len(ordered) - 1, round((pct / 100) * (len(ordered) - 1)))
+    return ordered[idx]
+
+
+def summarize(values: list[float]) -> dict:
+    return {
+        "n": len(values),
+        "p50": round(percentile(values, 50), 1),
+        "p70": round(percentile(values, 70), 1),
+        "p100": round(percentile(values, 100), 1),
+        "mean": round(statistics.fmean(values), 1) if values else 0.0,
+    }
+
+
+def bench_retrieval_only(strategy: str, queries: list[dict], top_k: int, candidate_k: int) -> dict:
+    bundle = load_strategy_bundle(strategy, settings.data_dir)
+    # Untimed warm-up: the first embed call pays a one-time ONNX model load
+    # that a deployed server only pays once at startup, not per query. Timing
+    # it in would badly skew P100 (and P50, at these sample sizes).
+    stages.run_retrieval(queries[0]["query"], bundle, top_k, candidate_k)
+    times_ms: list[float] = []
+    for item in queries:
+        t0 = time.perf_counter()
+        stages.run_retrieval(item["query"], bundle, top_k, candidate_k)
+        times_ms.append((time.perf_counter() - t0) * 1000)
+    return summarize(times_ms)
+
+
+def bench_full_path(strategy: str, queries: list[dict], pace_seconds: float = 0.0) -> dict:
+    pipeline = Pipeline.from_strategy(strategy)
+    # Untimed warm-up: first-call cost of constructing the Groq/Gemini SDK
+    # clients and their initial TLS handshake, same reasoning as the
+    # retrieval warm-up above, a live server pays this once, not per query.
+    pipeline.run(queries[0]["query"])
+    total_ms: list[float] = []
+    stage_ms: dict[str, list[float]] = {}
+    refused = 0
+    providers: dict[str, int] = {}
+
+    for i, item in enumerate(queries, start=1):
+        if pace_seconds and i > 1:
+            time.sleep(pace_seconds)
+        result = pipeline.run(item["query"])
+        total_ms.append(result.total_elapsed_ms)
+        if result.refused:
+            refused += 1
+        if result.generation:
+            providers[result.generation.provider] = providers.get(result.generation.provider, 0) + 1
+        for t in result.timings:
+            stage_ms.setdefault(t.stage, []).append(t.elapsed_ms)
+        print(f"  [{i}/{len(queries)}] {result.total_elapsed_ms:.0f}ms  {item['query'][:60]}")
+
+    return {
+        "total": summarize(total_ms),
+        "stages": {name: summarize(vals) for name, vals in stage_ms.items()},
+        "refused": refused,
+        "providers": providers,
+    }
+
+
+def render_report(
+    strategy_comparison: dict[str, dict],
+    production_strategy: str,
+    full_path: dict,
+    retrieval_n: int,
+    full_n: int,
+    pace_seconds: float,
+) -> str:
+    lines = [
+        "# Latency report",
+        "",
+        f"Generated by `backend/scripts/benchmark_latency.py`. Query set: real `Eng_Query` values from the "
+        f"{SAMPLE_ROWS} MS MARCO rows sampled into the index (see PLAN.md Phase 1), cached at "
+        "`backend/data/benchmark_queries.json`, sampled with a fixed seed for reproducibility.",
+        "",
+        "## The 200ms target, honestly reported",
+        "",
+        "The task scopes 200ms as chunking through final output, which literally includes the LLM generation "
+        "call. No hosted LLM API generates a response in under 200ms today, so gaming a single number would "
+        "misrepresent the system. Two numbers are reported instead:",
+        "",
+        "- **Retrieval-only path** (embed query, hybrid search, RRF fusion): this is what's targeted to actually "
+        "land under 200ms, and doubles as a fast extractive answer mode (best passage returned directly, no LLM).",
+        "- **Full path** (retrieval plus Groq/Gemini generation): reported honestly as the richer, slower mode.",
+        "",
+        "## Retrieval-only latency by chunking strategy",
+        "",
+        f"{retrieval_n} queries per strategy, same query sample across all five, local compute only (no network "
+        "calls).",
+        "",
+        "| Strategy | Chunks | P50 (ms) | P70 (ms) | P100 (ms) | Mean (ms) | Under 200ms |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for strat, stats in strategy_comparison.items():
+        under = "yes" if stats["p100"] < 200 else ("mostly" if stats["p70"] < 200 else "no")
+        lines.append(
+            f"| {strat}{' (production)' if strat == production_strategy else ''} | {stats['chunks']} | "
+            f"{stats['p50']} | {stats['p70']} | {stats['p100']} | {stats['mean']} | {under} |"
+        )
+
+    lines += [
+        "",
+        f"**Production strategy: `{production_strategy}`.** See PLAN.md Phase 4 notes for the reasoning.",
+        "",
+        "## Full path latency (retrieval + generation)",
+        "",
+        f"{full_n} queries against the `{production_strategy}` index, spaced {pace_seconds}s apart to reflect "
+        "one interactive user rather than a burst, since Groq's free tier throttles sustained back-to-back "
+        "traffic (see the throttling note below). Includes real Groq/Gemini API calls, so this reflects live "
+        "network and provider latency at benchmark time, not just this machine.",
+        "",
+        "| Metric | P50 (ms) | P70 (ms) | P100 (ms) | Mean (ms) | n |",
+        "|---|---|---|---|---|---|",
+    ]
+    t = full_path["total"]
+    lines.append(f"| Total | {t['p50']} | {t['p70']} | {t['p100']} | {t['mean']} | {t['n']} |")
+    lines += [
+        "",
+        f"Refused (off-topic or ungrounded): {full_path['refused']}/{full_n}. "
+        f"Generation provider split: {full_path['providers'] or 'none'}.",
+        "",
+        "### Per-stage breakdown (full path)",
+        "",
+        "| Stage | P50 (ms) | P70 (ms) | P100 (ms) | Mean (ms) |",
+        "|---|---|---|---|---|",
+    ]
+    for stage_name, stats in full_path["stages"].items():
+        lines.append(f"| {stage_name} | {stats['p50']} | {stats['p70']} | {stats['p100']} | {stats['mean']} |")
+
+    lines += [
+        "",
+        "STT (Sarvam) latency isn't included in the numbers above since this benchmark runs text queries at "
+        "volume; the audio path was verified end to end in Phase 3 (`run_harness.py --audio`) but isn't "
+        "re-benchmarked here at scale to avoid burning Sarvam's free-tier minutes on synthetic load.",
+        "",
+        "## Sustained-load throttling (diagnostic finding)",
+        "",
+        "A first run of this benchmark sent all 40 full-path queries back to back with no pacing between them. "
+        "Generation latency was bimodal: a handful of queries returned in 600-1300ms, most took 5-18s, "
+        "`generation` stage P50 8684ms and P100 17739ms, all still served by Groq (the Gemini/extractive "
+        "fallback never triggered, so these were slow responses, not hard failures). A quick 8-query spot check "
+        "with 3s gaps looked fully fixed (every one back to 640-1050ms), but re-running the full 40-query sample "
+        "at a steady 2.5s pace, the numbers reported above, told a more honest story: pacing roughly halved the "
+        "damage (P50 8751ms to 3732ms, P100 17806ms to 7002ms) without eliminating it, individual queries still "
+        "land anywhere from ~400ms to ~7s even when spaced out. That pattern (recovers, then degrades again over "
+        "several queries, regardless of per-request spacing) points at a rolling token-throughput budget on "
+        "Groq's free tier rather than a pure request-count limit, since this pipeline's prompt includes five "
+        "full retrieved passages as context, not just the query. Not confirmed against Groq's actual rate-limit "
+        "headers, a hypothesis consistent with the observed pattern, not a verified root cause. Either way: the "
+        "automatic Gemini fallback exists for outright failures, not for a provider that's merely slow, so it "
+        "doesn't help here, and a live demo doing one query at a time should mostly see the faster end of this "
+        "range.",
+        "",
+        "## Guardrail calibration, checked against this query set",
+        "",
+        "Phase 2 set `grounding_overlap_threshold=0.6` against a handful of hand-picked queries and flagged it "
+        "for revisiting once a larger, real query set was available. Checked against the unpaced 40-query run: "
+        "every refused answer's lexical overlap with retrieved context was 0.59 or below, and every passed "
+        "answer was 0.64 or above, a clean gap with the threshold sitting inside it. No change made; the "
+        "provisional value holds up. Separately, none of those 40 (all genuine on-topic MS MARCO queries) were "
+        "rejected by the off-topic guardrail, zero false positives there either. One caveat worth recording: "
+        "generation runs at `temperature=0.2`, so the same query can land on either side of the grounding "
+        "threshold across repeated runs when its overlap score sits near the boundary (the refused count moved "
+        "from 8/40 to 7/40 between the unpaced and paced full-path runs over the same 40 queries). That's "
+        "inherent LLM sampling variance, not guardrail noise.",
+        "",
+        "## Tuning applied this phase",
+        "",
+        "`hybrid_search` was computing raw top-1 dense and BM25 scores (needed by the off-topic guardrail) by "
+        "querying both indexes a second time after the fused search already ran. `search.hybrid_search_with_scores` "
+        "now reads those raw scores off the same dense/BM25 calls used for fusion, cutting the retrieval stage's "
+        "index-query work roughly in half.",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Benchmark Groundline pipeline latency")
+    parser.add_argument("--production-strategy", default=settings.default_strategy)
+    parser.add_argument("--retrieval-n", type=int, default=150, help="queries per strategy for the retrieval-only sweep")
+    parser.add_argument("--full-n", type=int, default=40, help="queries for the full path (burns Groq/Gemini quota)")
+    parser.add_argument(
+        "--pace-seconds",
+        type=float,
+        default=2.5,
+        help="delay between full-path queries; Groq's free tier throttles unpaced back-to-back requests (see docs/latency-report.md)",
+    )
+    parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--refresh-queries", action="store_true", help="re-pull the query pool from source parquet")
+    parser.add_argument("--skip-full", action="store_true", help="only run the retrieval-only sweep")
+    parser.add_argument("--out", type=Path, default=REPORT_PATH)
+    args = parser.parse_args()
+
+    pool = load_query_pool(args.refresh_queries)
+    print(f"Query pool: {len(pool)} queries\n")
+
+    retrieval_queries = sample_queries(pool, args.retrieval_n, args.seed)
+    strategy_comparison: dict[str, dict] = {}
+    for strategy in STRATEGIES:
+        print(f"Retrieval-only sweep: {strategy}...")
+        bundle = load_strategy_bundle(strategy, settings.data_dir)
+        stats = bench_retrieval_only(strategy, retrieval_queries, settings.retrieval_top_k, settings.retrieval_candidate_k)
+        stats["chunks"] = len(bundle.chunks)
+        strategy_comparison[strategy] = stats
+        print(f"  P50 {stats['p50']}ms  P70 {stats['p70']}ms  P100 {stats['p100']}ms  ({stats['n']} queries)\n")
+
+    full_path: dict = {"total": summarize([]), "stages": {}, "refused": 0, "providers": {}}
+    if not args.skip_full:
+        full_queries = sample_queries(pool, args.full_n, args.seed + 1)
+        print(
+            f"Full-path benchmark against '{args.production_strategy}' "
+            f"({len(full_queries)} queries, {args.pace_seconds}s apart)..."
+        )
+        full_path = bench_full_path(args.production_strategy, full_queries, args.pace_seconds)
+        t = full_path["total"]
+        print(f"\nFull path: P50 {t['p50']}ms  P70 {t['p70']}ms  P100 {t['p100']}ms  refused {full_path['refused']}/{len(full_queries)}")
+
+    report = render_report(
+        strategy_comparison, args.production_strategy, full_path, args.retrieval_n, args.full_n, args.pace_seconds
+    )
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(report, encoding="utf-8")
+    print(f"\nWrote {args.out}")
+
+
+if __name__ == "__main__":
+    main()

@@ -5,6 +5,8 @@ from pathlib import Path
 import faiss
 import numpy as np
 
+from ..config import settings
+
 
 def build_flat_index(embeddings: np.ndarray) -> faiss.Index:
     embeddings = np.ascontiguousarray(embeddings, dtype="float32")
@@ -20,6 +22,12 @@ def save_index(index: faiss.Index, path: Path) -> None:
 
 
 def load_index(path: Path) -> faiss.Index:
+    # Thread count is a process-wide OpenMP setting rather than a property of
+    # the index, so it is applied here: this is the one point every path that
+    # is about to search goes through, and applying it anywhere later means
+    # something searches once at the wrong setting first. See the comment on
+    # `faiss_threads` in config.py for the measurement behind the value.
+    faiss.omp_set_num_threads(settings.faiss_threads)
     return faiss.read_index(str(path))
 
 

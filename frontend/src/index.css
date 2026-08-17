@@ -1,0 +1,191 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Neutrals are warm biased rather than pure grey. The accent is an orange,
+     and against a cool grey ground that lands near a complementary pairing,
+     which reads as a warning color. Pulling the whole neutral ramp a few
+     degrees toward the same hue makes it analogous instead, so the accent
+     draws the eye without shouting. Same reasoning as brand/README.md, applied
+     to a white surface rather than a paper one. */
+  --color-paper: #ffffff;
+  --color-veil: #f7f6f3;
+  --color-ink: #16130f;
+  --color-muted: #6c665e;
+  --color-subtle: #7c7568;
+  --color-line: #e8e4dd;
+  --color-line-soft: #f1eee9;
+
+  /* Two weights of the one accent. The brand value is only AA at large sizes
+     on white (3.9:1), so it fills shapes and sets display numerals, while the
+     darker weight (5.7:1) carries anything set at body size. */
+  --color-accent: #c26a1e;
+  --color-accent-ink: #9c5412;
+
+  --color-verified: #35674a;
+  --color-danger: #b0402c;
+
+  /* One easing curve for the whole page. Decelerating, no overshoot: motion
+     should get out of the way, not perform. */
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Type scales fluidly with the viewport instead of stepping at breakpoints,
+     so a 1280px laptop and a 2560px monitor get the same proportions rather
+     than the same pixel sizes. */
+  --text-display: clamp(2.5rem, 5.8vw, 5.25rem);
+  --text-display--line-height: 0.98;
+  --text-display--letter-spacing: -0.035em;
+  --text-display--font-weight: 600;
+
+  --text-title: clamp(1.6rem, 2.8vw, 2.75rem);
+  --text-title--line-height: 1.08;
+  --text-title--letter-spacing: -0.028em;
+  --text-title--font-weight: 600;
+
+  --text-figure: clamp(1.9rem, 3vw, 3rem);
+  --text-figure--line-height: 1;
+  --text-figure--letter-spacing: -0.03em;
+  --text-figure--font-weight: 600;
+
+  --text-lede: clamp(1rem, 1.1vw, 1.1875rem);
+  --text-lede--line-height: 1.6;
+
+  --animate-rise: rise 0.55s var(--ease-smooth) both;
+  --animate-breathe: breathe 2.6s ease-in-out infinite;
+  --animate-halo: halo 2.4s var(--ease-smooth) infinite;
+  --animate-drift: drift 1.4s var(--ease-smooth) infinite;
+}
+
+/* The page runs edge to edge. Content is inset by a gutter that grows with the
+   viewport instead of a fixed max width, so a wide monitor gets a wide layout
+   rather than a centered column with empty margins. Line length is held in
+   check per block (max-w on prose) rather than by starving the whole page. */
+@utility gutter {
+  padding-inline: clamp(1.25rem, 4.2vw, 5rem);
+}
+
+/* Thin, low contrast scrollbars for the panes that scroll inside the layout
+   (the source rail, and each passage within it). The default Windows bar is
+   heavy enough to read as a border. */
+@utility scroll-soft {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+/* Concentric rings leaving the record button. Two copies at opposite phases
+   read as a steady pulse rather than a repeating pop. */
+@keyframes halo {
+  0% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  70% {
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+html {
+  color-scheme: light;
+  scroll-behavior: smooth;
+  /* The nav is fixed, so anchor targets have to clear it. */
+  scroll-padding-top: 5.5rem;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Nothing on the page scrolls sideways; this stops a sub-pixel overflow in a
+     full bleed row from adding a horizontal scrollbar on small screens. */
+  overflow-x: hidden;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+
+/* Scroll reveal.
+ *
+ * The hidden state is scoped to a class that main.tsx sets before the first
+ * render, so if the script never runs the content is simply visible rather
+ * than permanently transparent. `useRevealScope` flips data-reveal to "shown"
+ * as each section enters the viewport. */
+.reveal-ready [data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  transition:
+    opacity 0.8s var(--ease-smooth),
+    transform 0.8s var(--ease-smooth);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+
+.reveal-ready [data-reveal="shown"] {
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+
+/* Respect the OS setting rather than animating regardless. Reveals, count ups
+   and the recording pulse all repeat, which is what this setting exists for.
+   The reveal rule has to reset the transform too, not just the duration, or
+   elements stay nudged 14px down. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reveal-ready [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
