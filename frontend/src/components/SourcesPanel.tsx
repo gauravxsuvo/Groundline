@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { ChevronDown, Library } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { Library } from 'lucide-react'
 import type { PipelineResult } from '../lib/api'
 import { Card } from './ui/card'
 import { Badge } from './ui/badge'
@@ -24,52 +24,61 @@ function locateEvidence(text: string, evidence: string): [string, string, string
   return [text.slice(0, match.index), match[0], text.slice(match.index + match[0].length)]
 }
 
-function Passage({
-  text,
-  evidence,
-  cited,
-}: {
-  text: string
-  evidence: string
-  cited: boolean
-}) {
-  const [expanded, setExpanded] = useState(false)
+function Passage({ text, evidence, cited }: { text: string; evidence: string; cited: boolean }) {
+  const boxRef = useRef<HTMLParagraphElement>(null)
+  const markRef = useRef<HTMLElement>(null)
   const located = cited && evidence ? locateEvidence(text, evidence) : null
-  const long = text.length > 260
 
-  // A cited passage opens far enough to show the quote in place. Highlighting
-  // a sentence that is clipped out of view would be pointless.
-  const clamped = !expanded && long && !located
+  // Every passage scrolls inside a fixed height so the rail stays one even
+  // row. That can hide the quote the answer rests on, which is the line a
+  // reviewer most wants to see, so nudge it into view. Done by setting
+  // scrollTop on the passage itself rather than calling scrollIntoView, which
+  // is free to scroll the whole page as well and would yank the reader down to
+  // the sources the moment an answer arrives.
+  useEffect(() => {
+    const box = boxRef.current
+    const mark = markRef.current
+    if (!box || !mark) return
+    const offset = mark.getBoundingClientRect().top - box.getBoundingClientRect().top
+    if (offset > box.clientHeight * 0.55) box.scrollTop += offset - 16
+  }, [text, evidence, cited])
 
   return (
-    <div>
-      <p className={`text-sm leading-relaxed text-ink/90 ${clamped ? 'line-clamp-4' : ''}`}>
-        {located ? (
-          <>
-            {located[0]}
-            <mark className="rounded bg-verified/15 px-0.5 text-ink decoration-verified/40 underline-offset-2">
-              {located[1]}
-            </mark>
-            {located[2]}
-          </>
-        ) : (
-          text
-        )}
-      </p>
-      {long && !located && (
-        <button
-          type="button"
-          onClick={() => setExpanded((value) => !value)}
-          className="mt-1.5 inline-flex items-center gap-1 text-xs text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          <ChevronDown size={12} className={expanded ? 'rotate-180 transition-transform' : 'transition-transform'} />
-          {expanded ? 'Show less' : 'Show full passage'}
-        </button>
+    // A scrollable region needs to be focusable, or the text below the fold in
+    // it is unreachable without a mouse (WCAG 2.1.1).
+    <p
+      ref={boxRef}
+      tabIndex={0}
+      className="scroll-soft max-h-44 overflow-y-auto pr-1 text-[0.8125rem] leading-relaxed text-ink/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink"
+    >
+      {located ? (
+        <>
+          {located[0]}
+          {/* box-decoration-break keeps the tint as one shape when the quote
+              wraps. Without it every line gets its own square block and the
+              highlight reads as a redaction rather than a marker. */}
+          <mark
+            ref={markRef}
+            className="rounded bg-verified/18 px-0.5 py-px text-ink [box-decoration-break:clone] [-webkit-box-decoration-break:clone]"
+          >
+            {located[1]}
+          </mark>
+          {located[2]}
+        </>
+      ) : (
+        text
       )}
-    </div>
+    </p>
   )
 }
 
+/** The retrieved passages, as one row that runs the width of the page.
+ *
+ *  A rail rather than a stacked list: five passages side by side can be
+ *  compared at a glance, which is the point of showing all of them rather than
+ *  only the cited one. Each card is a fixed height and scrolls internally, so
+ *  a long passage never drags the row out of shape.
+ */
 export function SourcesPanel({ result }: { result: PipelineResult | null }) {
   const chunks = result?.retrieval?.chunks ?? []
   const citations = new Set(result?.generation?.citations ?? [])
@@ -78,24 +87,26 @@ export function SourcesPanel({ result }: { result: PipelineResult | null }) {
   return (
     <Card
       title="Sources"
-      icon={<Library size={14} />}
+      icon={<Library size={13} />}
       action={
         chunks.length > 0 ? (
           <span className="text-xs text-muted tabular-nums">
-            {result?.refused ? `${chunks.length} retrieved, not used` : `top ${chunks.length}`}
+            {result?.refused ? `${chunks.length} retrieved, none used` : `top ${chunks.length}`}
           </span>
         ) : null
       }
     >
       {chunks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <p className="max-w-xs text-sm leading-relaxed text-muted">
-            The passages retrieved for a question appear here, with the one the answer is built on
-            marked and its supporting sentence highlighted.
-          </p>
-        </div>
+        <p className="max-w-[64ch] text-sm leading-relaxed text-muted">
+          The passages retrieved for a question appear here, all of them, with the one the answer is
+          built on marked and its supporting sentence highlighted in place.
+        </p>
       ) : (
-        <ol className="flex animate-rise flex-col gap-3">
+        <ol
+          tabIndex={0}
+          aria-label="Retrieved passages"
+          className="scroll-soft -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink"
+        >
           {chunks.map((chunk, i) => {
             // On a refusal nothing was accepted, so nothing gets the verified
             // treatment: the citation belongs to a draft answer that was
@@ -104,21 +115,22 @@ export function SourcesPanel({ result }: { result: PipelineResult | null }) {
             return (
               <li
                 key={chunk.chunk_id}
-                className={
-                  cited
-                    ? 'rounded-xl border border-verified/40 bg-verified/5 p-3'
-                    : 'rounded-xl border border-line p-3'
-                }
+                className={`flex min-w-[16.5rem] flex-1 animate-rise snap-start flex-col rounded-[1.125rem] border p-4 transition-colors duration-300 ${
+                  cited ? 'border-verified/35 bg-verified/5' : 'border-line bg-paper'
+                }`}
+                style={{ animationDelay: `${i * 60}ms` }}
               >
-                <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-muted tabular-nums">#{i + 1}</span>
+                <div className="mb-2.5 flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-semibold text-subtle tabular-nums">
+                    {i + 1}
+                  </span>
                   {cited && <Badge variant="verified">cited</Badge>}
                   {typeof chunk.metadata?.query_type === 'string' && (
-                    <span className="text-[11px] text-muted">
+                    <span className="text-[11px] text-subtle">
                       {(chunk.metadata.query_type as string).toLowerCase()}
                     </span>
                   )}
-                  <span className="ml-auto text-[11px] text-muted tabular-nums">
+                  <span className="ml-auto font-mono text-[11px] text-subtle tabular-nums">
                     {chunk.score.toFixed(3)}
                   </span>
                 </div>

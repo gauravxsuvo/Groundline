@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { TriangleAlert } from 'lucide-react'
-import { Header } from './components/Header'
-import { TargetStrip } from './components/TargetStrip'
+import { Nav } from './components/Nav'
+import { Hero } from './components/Hero'
+import { Section, SectionHeading } from './components/Section'
 import { RecordPanel } from './components/RecordPanel'
 import { AnswerPanel } from './components/AnswerPanel'
 import { SourcesPanel } from './components/SourcesPanel'
 import { LatencyPanel } from './components/LatencyPanel'
-import { PipelineFooter } from './components/PipelineFooter'
+import { MetricsBand } from './components/MetricsBand'
+import { PipelineSection } from './components/PipelineSection'
+import { SiteFooter } from './components/SiteFooter'
+import { delay } from './lib/motion'
 import { fetchMeta, runQuery, runAudio, type Meta, type PipelineResult } from './lib/api'
 
 type Submission = { type: 'text'; value: string } | { type: 'audio'; value: Blob; filename: string }
@@ -35,6 +39,13 @@ function App() {
   async function handleSubmit(submission: Submission) {
     setBusy(true)
     setError(null)
+    // Drop the previous result rather than leaving it on screen. Only the
+    // answer panel has a loading state, so keeping it meant the sources and
+    // the timings for the last question sat there looking like they belonged
+    // to the one being asked. On an app whose whole claim is that an answer is
+    // traceable to the passages beside it, that is the worst thing to get
+    // wrong.
+    setResult(null)
     try {
       const next =
         submission.type === 'text'
@@ -50,39 +61,63 @@ function App() {
 
   return (
     <div className="min-h-svh bg-paper">
-      <Header meta={meta} />
-      <main className="mx-auto w-full max-w-[1600px] px-4 py-6 md:px-8 md:py-8">
-        <TargetStrip meta={meta} />
+      <Nav meta={meta} />
 
-        {error && (
-          <div className="mb-6 flex items-center gap-2 rounded-xl bg-danger/8 px-4 py-3 text-sm text-danger">
-            <TriangleAlert size={16} className="shrink-0" />
-            {error}
-          </div>
-        )}
+      <main>
+        <Hero meta={meta} />
 
-        {/* Flat grid with explicit placement rather than a nested left column,
-            so the reading order can differ per width. On a phone the answer has
-            to come straight after the question; from 640px up the ask and
-            latency cards pair off side by side and the answer moves below
-            them; from 1024px it is the three column layout. */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-[360px_1fr_360px]">
-          <div className="order-1 lg:col-start-1 lg:row-start-1 lg:self-start">
-            <RecordPanel busy={busy} onSubmit={handleSubmit} />
-          </div>
-          <div className="order-2 sm:order-3 sm:col-span-2 lg:order-2 lg:col-span-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
-            <AnswerPanel result={result} busy={busy} />
-          </div>
-          <div className="order-3 sm:order-4 sm:col-span-2 lg:col-span-1 lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:self-start">
-            <SourcesPanel result={result} />
-          </div>
-          <div className="order-4 sm:order-2 lg:col-start-1 lg:row-start-2 lg:self-start">
-            <LatencyPanel result={result} meta={meta} />
-          </div>
-        </div>
+        <Section id="ask" tone="veil" className="border-t border-line">
+          <div className="py-20 md:py-24">
+            <SectionHeading eyebrow="Try it" title="Ask, and watch what it does with the question.">
+              <p>
+                Four panels, all filled by the same request: what you asked, what came back, the
+                passages it came from, and where the time went. Nothing here is a mock.
+              </p>
+            </SectionHeading>
 
-        <PipelineFooter meta={meta} />
+            {error && (
+              <div className="mt-8 flex max-w-[70ch] items-start gap-2.5 rounded-[1.125rem] bg-danger/6 px-4 py-3.5 text-sm leading-relaxed text-danger">
+                <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+                {error}
+              </div>
+            )}
+
+            {/* One flat grid with explicit ordering rather than nested columns,
+                so the reading order can change with the width. On a phone the
+                answer has to come straight after the question. From 768px the
+                ask and latency panels pair off and the answer moves below them.
+                From 1280px it is three columns with the source rail beneath,
+                running the full width of the page. */}
+            <div className="mt-10 grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[minmax(18rem,22%)_minmax(0,1fr)_minmax(18rem,24%)]">
+              <div className="md:order-1 xl:order-1" data-reveal>
+                <RecordPanel busy={busy} onSubmit={handleSubmit} />
+              </div>
+              <div
+                className="md:order-3 md:col-span-2 xl:order-2 xl:col-span-1"
+                data-reveal
+                style={delay(80)}
+              >
+                <AnswerPanel result={result} busy={busy} />
+              </div>
+              <div
+                className="md:order-4 md:col-span-2 xl:order-4 xl:col-span-3"
+                data-reveal
+                style={delay(240)}
+              >
+                <SourcesPanel result={result} />
+              </div>
+              <div className="md:order-2 xl:order-3" data-reveal style={delay(160)}>
+                <LatencyPanel result={result} meta={meta} />
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        <MetricsBand meta={meta} />
+        <PipelineSection meta={meta} />
       </main>
+
+      <SiteFooter meta={meta} />
     </div>
   )
 }

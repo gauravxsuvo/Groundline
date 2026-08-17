@@ -29,14 +29,14 @@ function BudgetBar({ elapsedMs, targetMs }: { elapsedMs: number; targetMs: numbe
 
   return (
     <div>
-      <div className="relative h-2.5 overflow-hidden rounded-full bg-line">
+      <div className="relative h-2 overflow-hidden rounded-full bg-line-soft">
         <div
-          className={`h-full rounded-full transition-[width] duration-500 ${over ? 'bg-danger' : 'bg-verified'}`}
+          className={`h-full rounded-full transition-[width] duration-700 ease-smooth ${over ? 'bg-danger' : 'bg-verified'}`}
           style={{ width: `${Math.max(1.5, filled)}%` }}
         />
-        <div className="absolute inset-y-0 left-1/2 w-px bg-paper/70" />
+        <div className="absolute inset-y-0 left-1/2 w-px bg-paper" />
       </div>
-      <div className="mt-1 flex justify-between text-[11px] text-muted tabular-nums">
+      <div className="mt-1.5 flex justify-between text-[10px] text-subtle tabular-nums">
         <span>0</span>
         <span>{Math.round(targetMs / 2)}ms</span>
         <span>{targetMs}ms target</span>
@@ -48,18 +48,23 @@ function BudgetBar({ elapsedMs, targetMs }: { elapsedMs: number; targetMs: numbe
 function StageRow({ timing, max, network }: { timing: StageTiming; max: number; network: boolean }) {
   return (
     <div>
-      <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+      <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
         <span className="flex items-center gap-1.5 text-muted">
-          {network ? <Cloud size={12} className="text-muted/70" /> : <Cpu size={12} className="text-muted/70" />}
+          {network ? (
+            <Cloud size={12} className="text-subtle" />
+          ) : (
+            <Cpu size={12} className="text-subtle" />
+          )}
           {STAGE_LABELS[timing.stage] ?? timing.stage}
         </span>
         <span className="font-medium text-ink tabular-nums">
-          {timing.elapsed_ms < 1 ? '<1' : timing.elapsed_ms.toFixed(timing.elapsed_ms < 100 ? 1 : 0)}ms
+          {timing.elapsed_ms < 1 ? '<1' : timing.elapsed_ms.toFixed(timing.elapsed_ms < 100 ? 1 : 0)}
+          ms
         </span>
       </div>
-      <div className="h-1 overflow-hidden rounded-full bg-line/70">
+      <div className="h-[3px] overflow-hidden rounded-full bg-line-soft">
         <div
-          className={`h-full rounded-full transition-[width] duration-500 ${network ? 'bg-muted/40' : 'bg-accent'}`}
+          className={`h-full rounded-full transition-[width] duration-700 ease-smooth ${network ? 'bg-subtle/45' : 'bg-accent'}`}
           style={{ width: `${Math.max(1.5, (timing.elapsed_ms / max) * 100)}%` }}
         />
       </div>
@@ -84,9 +89,9 @@ export function LatencyPanel({ result, meta }: { result: PipelineResult | null; 
   const networkMax = Math.max(1, ...network.map((t) => t.elapsed_ms))
 
   return (
-    <Card title="Latency" icon={<Gauge size={14} />}>
+    <Card title="Latency" icon={<Gauge size={13} />}>
       {timings.length === 0 ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           <BudgetBar elapsedMs={0} targetMs={targetMs} />
           <p className="text-xs leading-relaxed text-muted">
             Every stage is timed per query. The in-process path is measured against the {targetMs}ms
@@ -95,20 +100,21 @@ export function LatencyPanel({ result, meta }: { result: PipelineResult | null; 
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex animate-rise flex-col gap-5">
           <div>
-            <div className="mb-2 flex items-baseline justify-between">
-              <span className="text-xs font-medium tracking-wide text-muted uppercase">
+            <div className="mb-2.5 flex items-baseline justify-between gap-3">
+              <span className="text-[11px] font-medium tracking-[0.14em] text-subtle uppercase">
                 In process
               </span>
               <span
-                className={`text-2xl leading-none font-semibold tabular-nums ${localMs <= targetMs ? 'text-verified' : 'text-danger'}`}
+                className={`text-[1.75rem] leading-none font-semibold tracking-[-0.03em] tabular-nums ${localMs <= targetMs ? 'text-verified' : 'text-danger'}`}
               >
-                {localMs.toFixed(0)}ms
+                {localMs.toFixed(0)}
+                <span className="text-sm font-medium text-subtle">ms</span>
               </span>
             </div>
             <BudgetBar elapsedMs={localMs} targetMs={targetMs} />
-            <p className="mt-2 text-xs text-muted">
+            <p className="mt-3 text-xs leading-relaxed text-muted">
               Retrieval and guardrails, this query.{' '}
               {localMs <= targetMs
                 ? `Under the ${targetMs}ms target by ${(targetMs - localMs).toFixed(0)}ms.`
@@ -116,16 +122,16 @@ export function LatencyPanel({ result, meta }: { result: PipelineResult | null; 
             </p>
           </div>
 
-          <div className="flex flex-col gap-2.5 border-t border-line pt-4">
+          <div className="flex flex-col gap-3 border-t border-line pt-5">
             {local.map((t) => (
               <StageRow key={t.stage} timing={t} max={localMax} network={false} />
             ))}
           </div>
 
           {network.length > 0 && (
-            <div className="flex flex-col gap-2.5 border-t border-line pt-4">
+            <div className="flex flex-col gap-3 border-t border-line pt-5">
               <div className="flex items-baseline justify-between">
-                <span className="text-xs font-medium tracking-wide text-muted uppercase">
+                <span className="text-[11px] font-medium tracking-[0.14em] text-subtle uppercase">
                   Network calls
                 </span>
                 <span className="text-sm font-semibold text-ink tabular-nums">
@@ -143,7 +149,7 @@ export function LatencyPanel({ result, meta }: { result: PipelineResult | null; 
             </div>
           )}
 
-          <div className="flex items-baseline justify-between border-t border-line pt-3 text-sm">
+          <div className="flex items-baseline justify-between border-t border-line pt-4 text-sm">
             <span className="font-medium text-ink">End to end</span>
             <span className="font-semibold text-ink tabular-nums">
               {(result?.total_elapsed_ms ?? 0).toFixed(0)}ms
