@@ -137,9 +137,17 @@ class Settings(BaseSettings):
     # provider we need to keep working through the submission deadline.
     gemini_model: str = "gemini-flash-lite-latest"
 
-    # Hugging Face Hub, index artifact pull at container startup
+    # Hugging Face Hub, index artifacts. Defaulted rather than left blank so the
+    # image build can bake the index in without being handed a build arg, and so
+    # a deployment does not fall over because one environment variable was
+    # missed. Still overridable for a fork with its own index.
     hf_token: str = ""
-    hf_dataset_repo: str = ""
+    hf_dataset_repo: str = "gauravxsuvo/groundline-index"
+
+    # Where fastembed keeps the ONNX model. Set to a path inside the image so
+    # the model downloaded at build time is part of the image rather than
+    # landing somewhere temporary. Blank leaves fastembed's own default.
+    embed_cache_dir: str = ""
 
     port: int = 8000
 

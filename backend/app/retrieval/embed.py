@@ -17,7 +17,11 @@ def get_embedder() -> TextEmbedding:
     # it is capped well below that, and the resulting oversubscription is the
     # difference between a few milliseconds and a few hundred. See the comment
     # on `embed_threads` in config.py for the measurement.
-    return TextEmbedding(model_name=MODEL_NAME, threads=settings.embed_threads)
+    return TextEmbedding(
+        model_name=MODEL_NAME,
+        threads=settings.embed_threads,
+        cache_dir=settings.embed_cache_dir or None,
+    )
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:
