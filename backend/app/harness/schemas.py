@@ -44,9 +44,16 @@ class LLMAnswer(BaseModel):
     every time, across all three reasoning_effort levels. A single required
     int sidesteps the multi-element-array formatting bug entirely and was
     100% reliable in testing.
+
+    Field order is load-bearing. Both providers emit JSON in schema order, so
+    `evidence` is declared before `answer` to make the model copy the
+    supporting span out of the passages first and write the answer after it,
+    rather than writing an answer and then going looking for something to
+    justify it with.
     """
 
     citation: int
+    evidence: str
     answer: str
     grounded: bool
     confidence: float
@@ -57,6 +64,10 @@ GenerationMode = Literal["extractive", "llm"]
 
 class GenerationOutput(BaseModel):
     answer: str
+    # The span the model copied out of the cited passage as its support. Kept
+    # on the output so the UI can show the reader the exact sentence the answer
+    # rests on, and so the grounding guard can check it is really there.
+    evidence: str = ""
     citations: list[str]
     grounded: bool
     confidence: float

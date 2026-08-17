@@ -8,11 +8,12 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from .benchmarks import BENCHMARKS, Benchmarks
 from .config import settings
 from .harness.logging_utils import get_logger
 from .harness.pipeline import Pipeline
 from .harness.schemas import PipelineResult
-from .retrieval import embed
+from .retrieval import chunking, embed
 
 logger = get_logger("api")
 
@@ -48,10 +49,54 @@ class QueryRequest(BaseModel):
     query: str
 
 
+class MetaResponse(BaseModel):
+    """What the system is running, so the UI can state it rather than assert it.
+
+    The UI reports a 200ms retrieval result on every answer. That claim is only
+    readable if a reviewer can also see which stages it covers and which ones
+    are network calls that were deliberately left out of it, so the stage split
+    is served from here rather than duplicated as frontend copy.
+    """
+
+    strategy: str
+    chunk_count: int
+    strategies_built: list[str]
+    top_k: int
+    embedding_model: str
+    stt_model: str
+    generation_model: str
+    fallback_model: str
+    # Stages that run in this process. These are the ones the 200ms target is
+    # measured against.
+    local_stages: list[str]
+    # Stages that leave the machine. Reported per query, never counted against
+    # the target, since no hosted API returns in 200ms.
+    network_stages: list[str]
+    benchmarks: Benchmarks
+
+
 @app.get("/api/health")
 def health() -> dict:
     pipeline = get_pipeline()
     return {"status": "ok", "strategy": pipeline.bundle.strategy, "chunks": len(pipeline.bundle.chunks)}
+
+
+@app.get("/api/meta", response_model=MetaResponse)
+def meta() -> MetaResponse:
+    pipeline = get_pipeline()
+    return MetaResponse(
+        strategy=pipeline.bundle.strategy,
+        chunk_count=len(pipeline.bundle.chunks),
+        strategies_built=sorted(chunking.STRATEGIES),
+        top_k=settings.retrieval_top_k,
+        embedding_model=embed.MODEL_NAME,
+        stt_model=settings.stt_model,
+        generation_model=settings.groq_model,
+        fallback_model=settings.gemini_model,
+        local_stages=["input_guard", "retrieval", "relevance_guard", "output_guard"],
+        network_stages=["transcribe", "generation"],
+        benchmarks=BENCHMARKS,
+    )
 
 
 @app.post("/api/query", response_model=PipelineResult)

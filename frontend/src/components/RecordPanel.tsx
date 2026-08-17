@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Mic, Square, Send, Loader2, TriangleAlert } from 'lucide-react'
+import { Mic, Square, Send, Loader2, TriangleAlert, ShieldOff } from 'lucide-react'
 import { Button } from './ui/button'
 import { Card } from './ui/card'
+import { ANSWERABLE, REFUSED, type Example } from '../lib/examples'
 import { MAX_DURATION_SECONDS, RecorderError, VoiceRecorder } from '../lib/recorder'
 
 type Submission = { type: 'text'; value: string } | { type: 'audio'; value: Blob; filename: string }
@@ -9,6 +10,46 @@ type Submission = { type: 'text'; value: string } | { type: 'audio'; value: Blob
 interface RecordPanelProps {
   busy: boolean
   onSubmit: (submission: Submission) => void
+}
+
+function ExampleRow({
+  title,
+  hint,
+  examples,
+  disabled,
+  onPick,
+  icon,
+}: {
+  title: string
+  hint: string
+  examples: Example[]
+  disabled: boolean
+  onPick: (query: string) => void
+  icon?: React.ReactNode
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 text-xs font-medium text-ink">
+        {icon}
+        {title}
+      </div>
+      <p className="mt-0.5 text-xs text-muted">{hint}</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {examples.map((example) => (
+          <button
+            key={example.query}
+            type="button"
+            disabled={disabled}
+            title={example.note}
+            onClick={() => onPick(example.query)}
+            className="rounded-full border border-line bg-paper px-2.5 py-1 text-xs text-muted transition-colors hover:border-accent/50 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+          >
+            {example.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export function RecordPanel({ busy, onSubmit }: RecordPanelProps) {
@@ -93,19 +134,24 @@ export function RecordPanel({ busy, onSubmit }: RecordPanelProps) {
   }
 
   return (
-    <Card title="Ask">
+    <Card title="Ask" icon={<Mic size={14} />}>
       <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line bg-paper/60 py-6">
-        <Button
-          type="button"
-          size="icon"
-          variant={recording ? 'accent' : 'primary'}
-          className="h-16 w-16"
-          onClick={recording ? finishRecording : startRecording}
-          disabled={busy}
-          aria-label={recording ? 'Stop recording' : 'Start recording'}
-        >
-          {recording ? <Square size={22} fill="currentColor" /> : <Mic size={22} />}
-        </Button>
+        <div className="relative">
+          {recording && (
+            <span className="absolute -inset-1.5 animate-sheen rounded-full bg-accent/25" aria-hidden="true" />
+          )}
+          <Button
+            type="button"
+            size="icon"
+            variant={recording ? 'accent' : 'primary'}
+            className="relative h-16 w-16"
+            onClick={recording ? finishRecording : startRecording}
+            disabled={busy}
+            aria-label={recording ? 'Stop recording' : 'Start recording'}
+          >
+            {recording ? <Square size={22} fill="currentColor" /> : <Mic size={22} />}
+          </Button>
+        </div>
 
         <p className="text-xs text-muted">
           {recording ? `Recording, tap to stop (${secondsLeft}s left)` : 'Tap to ask by voice'}
@@ -161,6 +207,27 @@ export function RecordPanel({ busy, onSubmit }: RecordPanelProps) {
           {busy ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
         </Button>
       </form>
+
+      {/* The corpus is a 5,000 row sample, so most invented questions are
+          genuinely not in it and come back refused, which reads as a broken
+          demo rather than a careful one. These have known outcomes. */}
+      <div className="mt-5 flex flex-col gap-4 border-t border-line pt-4">
+        <ExampleRow
+          title="Questions the corpus answers"
+          hint="Each one is stated outright in a passage it retrieves."
+          examples={ANSWERABLE}
+          disabled={busy}
+          onPick={(query) => onSubmit({ type: 'text', value: query })}
+        />
+        <ExampleRow
+          title="Questions it refuses"
+          hint="One per guardrail, and each refusal says which."
+          icon={<ShieldOff size={12} className="text-muted" />}
+          examples={REFUSED}
+          disabled={busy}
+          onPick={(query) => onSubmit({ type: 'text', value: query })}
+        />
+      </div>
     </Card>
   )
 }

@@ -122,11 +122,14 @@ class Pipeline:
             "generation", timings, lambda: stages.run_generation(query, retrieval)
         )
 
-        # Two independent grounding signals, and either one is enough to refuse.
-        # The model's own `grounded` flag catches the case the lexical check is
-        # blind to: a fluent "the context does not say" answer, written almost
-        # entirely out of words lifted from the context, scores high overlap and
-        # would otherwise be presented as a confident grounded answer.
+        # Three independent grounding signals, and any one of them is enough to
+        # refuse. The model's own `grounded` flag catches the case the lexical
+        # check is blind to: a fluent "the context does not say" answer, written
+        # almost entirely out of words lifted from the context, scores high
+        # overlap and would otherwise be presented as a confident grounded
+        # answer. The evidence span catches the opposite case, an answer the
+        # model is confident about and whose words all appear in the retrieved
+        # set, but which no single passage actually states.
         grounding_result = self._run_stage(
             "output_guard",
             timings,
@@ -135,6 +138,7 @@ class Pipeline:
                 [c.text for c in retrieval.chunks],
                 self.settings.grounding_overlap_threshold,
                 self_reported_grounded=generation.grounded,
+                evidence=generation.evidence,
             ),
         )
         if not grounding_result.passed:

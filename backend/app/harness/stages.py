@@ -63,6 +63,9 @@ def _extractive_fallback(retrieval: RetrievalOutput) -> GenerationOutput:
     top = retrieval.chunks[0]
     return GenerationOutput(
         answer=top.text,
+        # No quoted span: the answer is the passage, so there is nothing for it
+        # to quote and nothing for the grounding guard to verify.
+        evidence="",
         citations=[c.chunk_id for c in retrieval.chunks[:3]],
         grounded=True,
         confidence=top.score,
@@ -92,6 +95,7 @@ def run_generation(query: str, retrieval: RetrievalOutput) -> GenerationOutput:
         cited_chunk_ids = [context[llm_answer.citation - 1][0]] if 1 <= llm_answer.citation <= len(context) else []
         return GenerationOutput(
             answer=llm_answer.answer,
+            evidence=llm_answer.evidence,
             citations=cited_chunk_ids,
             grounded=llm_answer.grounded,
             confidence=llm_answer.confidence,

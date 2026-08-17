@@ -138,7 +138,8 @@ The project had latency numbers but no accuracy numbers, on a retrieval task. `b
 - [x] **The model's own `grounded: false` was being discarded.** The pipeline only ever consulted the lexical overlap check. Caught live: "who wrote the declaration of independence" returned "The provided context passages do not state who wrote the Declaration of Independence" with `grounded=false`, and because that sentence is built almost entirely from words lifted out of the context, it scored high overlap and would have been presented as a confident grounded answer. Both signals are now consulted and either one refuses.
 - [x] **A real hallucination leak, found and closed.** "what is the capital of France" was being answered "The capital of France is Paris" with `grounded=true` and confidence 1.0. Verified by inspecting the retrieved set that no passage states it; the closest reads "Paris in France lies on the Seine River". Both lexical checks pass that answer, because every content word in it does appear somewhere across the five passages, just never in one passage making the claim.
   - Tried and rejected: scoring overlap against the best single passage instead of the concatenation, and cosine similarity between the answer and each passage. Measured on grounded and hallucinated examples, neither separates. The hallucinated "everest" case scored 0.820 cosine against a genuinely grounded answer's 0.808. This class of error is a *relational* claim whose components are all present in the evidence, and word or vector overlap cannot verify a relation.
-  - What worked: since the self-report is now load-bearing, make it accurate. The system prompt now defines `grounded` explicitly, that the passages mentioning the same entities is not enough, and that a correct refusal beats a fact that is right for the wrong reason. The France query now refuses with "The context mentions Paris in France, but it does not state that Paris is the capital of France." 7 of 7 on the answer/refuse battery, including one case ("what causes the northern lights") that refused correctly against expectation, since the corpus turns out to have nothing on aurora.
+  - What worked, or looked like it did: since the self-report is now load-bearing, make it accurate. The system prompt now defines `grounded` explicitly, that the passages mentioning the same entities is not enough, and that a correct refusal beats a fact that is right for the wrong reason. The France query now refuses with "The context mentions Paris in France, but it does not state that Paris is the capital of France." 7 of 7 on the answer/refuse battery, including one case ("what causes the northern lights") that refused correctly against expectation, since the corpus turns out to have nothing on aurora.
+  - **This did not hold. See Phase 6.6.** The same query answered "Paris" with `grounded: true` again on a later check, three runs out of three. The prompt wording moved the behaviour without pinning it, and because the battery was run by hand and never written down as a script, the regression went unnoticed between phases.
 
 ### Latency and robustness
 
@@ -153,11 +154,36 @@ The project had latency numbers but no accuracy numbers, on a retrieval task. `b
 
 Known gap, recorded rather than hidden: the grounding fix rests on the model's self-assessment, which is a model behaviour and not a guarantee. The lexical check remains as an independent floor underneath it, but the France class of error is caught by prompt quality, not by a mechanism that cannot fail. Catching it structurally needs an entailment model, which is out of scope for this build.
 
-## Phase 7 - Polish and submission
-Status: not started
+## Phase 6.6 - Grounding regression, UI clarity, tests
+Status: done
 
-- [ ] Repo cleanup pass against style rules (no em dash, no emoji, no AI-sounding text, no Claude trailers)
-- [ ] README, AGENT.md, CLAUDE.md, `docs/latency-report.md` finalized
+Started as the frontend work for making the 200ms claim legible to a reviewer. Picking demo queries meant running them, and running them surfaced the regression below.
+
+### The grounding regression, and why it could happen
+
+- [x] **The France hallucination was back.** "what is the capital of france" answered "Paris", `grounded: true`, confidence 0.95, three runs out of three, against a retrieved set whose closest passage is "Paris in France lies on the Seine River" and which never states the capital. Both lexical signals pass it: a one word answer overlaps its context perfectly, and the model's self-report was wrong.
+- [x] **Fixed structurally rather than by wording this time.** `LLMAnswer` gained an `evidence` field, declared before `answer` since both providers emit JSON in schema order, and the prompt requires it to be copied character for character out of the cited passage. `output_guard.verify_evidence` then checks the span really occurs in the retrieved text, comparing word sequences so that casing, curly quotes and whitespace drift do not read as fabrication. It changes what the model is asked from a judgement it can rationalise into a retrieval it either can or cannot perform, and it gives the guardrail something it can check without trusting the model. The France query now copies the Seine River sentence and refuses.
+- [x] **The real root cause was that nothing tested it.** `backend/scripts/eval_grounding.py` runs the battery as a script now, nine cases with known outcomes, four answerable (which is where a stricter grounding rule would show up as false refusals) and five that must be refused, one per guardrail plus the two adversarial ones. 9/9. Write-up: `docs/grounding.md`.
+- [x] Measured what the extra field costs, interleaved round-robin so throttle drift hits both configs equally: median completion tokens 66 to 100, median generation 479ms to 586ms with the latency difference inside the noise at n=5. Noted in `docs/latency-report.md`.
+- [x] `backend/tests/` exists now, 16 pytest cases over both guardrails, no index or keys needed, each one a failure that actually happened during this build rather than an invented input.
+
+### Making the 200ms claim legible
+
+The number was in `docs/latency-report.md` and nowhere a reviewer would see it without opening the repo, and the UI reported a single blended total that invited exactly the misreading the report was written to avoid.
+
+- [x] `GET /api/meta` serves the live config (strategy, chunk count, top_k, model names) plus the measured benchmark figures and the local/network stage split, so the UI states what the backend is running rather than carrying its own copy of it.
+- [x] `TargetStrip` at the top of the page: the measured retrieval P50 against the 200ms target, in a sentence, plus what that figure covers and the explicit statement that generation is a hosted call, timed separately and never counted against it.
+- [x] `LatencyPanel` rewritten: in-process total drawn against a fixed 0 to 200ms scale (a fixed scale so a fast query looks fast), stages tagged in-process or network, network calls totalled separately, end to end last.
+- [x] `PipelineFooter`: the six stages with each one marked in-process or network, so the boundary the target is measured on is visible without reading prose.
+- [x] Demo queries in the UI, three the corpus answers and three it refuses, one per guardrail. The corpus is a 5,000 row sample, so questions a visitor invents mostly come back refused, which reads as broken rather than careful. These have verified outcomes and are kept in sync with `eval_grounding.py`.
+- [x] The answer now shows the quoted supporting span, and the sources panel highlights that span inside the passage it was taken from, matched the same way the backend verifies it.
+- [x] Layout reworked to a flat grid with explicit placement, so reading order can differ per width: phone gets ask, answer, sources, latency; 640px pairs ask and latency; 1024px is the three column layout. Checked at 390, 768, 1440 and 1920 with screenshots at each, in the empty, answered, refused and off-topic states.
+
+## Phase 7 - Polish and submission
+Status: in progress
+
+- [x] Repo cleanup pass against style rules (no em dash, no emoji, no AI-sounding text, no Claude trailers)
+- [x] README, AGENT.md, CLAUDE.md, `docs/` finalized
 - [ ] Submission checklist: repo link, live link, both videos, #RAGInGoa posts on Instagram/X/LinkedIn by every member, form submitted with buffer before the deadline
 
 ## Open blockers

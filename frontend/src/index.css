@@ -11,6 +11,34 @@
   --color-line: #e7e0d3;
   --color-panel: #ffffff;
   --color-danger: #b3432f;
+  /* Verified state. Deliberately not the brand accent: accent marks things you
+     can act on, and a grounded answer is a verdict, not a control. Desaturated
+     enough to sit on warm paper without going highlighter green. */
+  --color-verified: #3f6b4a;
+
+  --animate-rise: rise 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-sheen: sheen 1.6s ease-in-out infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sheen {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.8;
+  }
 }
 
 html {
@@ -23,4 +51,17 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Respect the OS setting rather than animating regardless. The rise animation
+   plays on every answer, so it is the kind of repeated motion this setting
+   exists for. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
