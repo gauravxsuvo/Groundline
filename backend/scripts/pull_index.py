@@ -38,7 +38,23 @@ REQUIRED_ARTIFACTS = (
 # into place once it is whole, so a file being present means it is complete.
 # Presence is therefore a sufficient check, and a partial file cannot pass it.
 
-DOWNLOAD_ATTEMPTS = 5
+# Ten rather than five. Every attempt resumes from the `.incomplete` files the
+# previous one left behind, so an extra attempt costs a few seconds of backoff
+# and never repeats work. On a link that stalls repeatedly, which is what the
+# deploy logs show, more attempts is close to free and is the difference between
+# finishing and not.
+DOWNLOAD_ATTEMPTS = 10
+
+# Download one file at a time instead of the default eight.
+#
+# 73MB of the 111MB bundle is a single file, dense.faiss, and it is the one the
+# logs keep dying on. Eight parallel workers split a congested link eight ways,
+# which makes every individual transfer slower and therefore likelier to trip
+# the read timeout, and any one of them failing aborts the whole snapshot. Going
+# sequential gives the large file the entire pipe and means a stall costs one
+# transfer rather than eight. Nothing here is latency bound, so there is no
+# throughput being left on the table.
+MAX_WORKERS = 1
 
 
 def missing_artifacts(strategy_dir: Path) -> list[str]:
@@ -81,6 +97,7 @@ def main() -> None:
                 token=token,
                 local_dir=str(DATA_DIR),
                 allow_patterns=[f"{args.strategy}/*"],
+                max_workers=MAX_WORKERS,
             )
             break
         except Exception as exc:

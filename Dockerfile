@@ -23,6 +23,18 @@ ENV PYTHONUNBUFFERED=1
 # means fewer restarts before the container comes up.
 ENV HF_HUB_DOWNLOAD_TIMEOUT=60
 
+# Keep downloads on the plain HTTP path rather than the Xet client.
+#
+# Currently a no-op: huggingface_hub is pinned at 0.28.1, which predates Xet
+# support entirely and has no constant to read this, and hf_xet is not installed
+# either, so `file_download.http_get` is already the only path available. The
+# `xet-bridge-us` host that shows up in download URLs is just where the Hub
+# redirects every client, including ones with no Xet support at all, so it is
+# not evidence that the Xet client is in play. Set here so that bumping the pin
+# later cannot quietly change how 111MB gets fetched on a link that is already
+# marginal, which is a thing that should be an explicit decision.
+ENV HF_HUB_DISABLE_XET=1
+
 # Bake the index and the embedding model into the image.
 #
 # Without this, every cold start downloads about 180MB from Hugging Face before
